@@ -205,3 +205,25 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# Data files
+/data/
+*.wav
+*.mp3
+*.mid
+*.midi
+*.npy
+
+# Machine learning artifacts
+/models/
+/checkpoints/
+*.pth
+*.h5
+*.onnx
+
+# Configuration files
+.env
+*.ini
+
+#日誌 files
+*.log
