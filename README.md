@@ -6,4 +6,3 @@ A deep learning model to separate piano melody from accompaniment tracks.
 ## 安裝環境
 
 請參考 [INSTALL.md](INSTALL.md)
-## 使用說明
