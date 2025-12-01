@@ -1,112 +1,148 @@
-import tensorflow as tf
+import torch
+from torch.utils.data import Dataset
 import librosa
 import numpy as np
-import glob
 import os
+import random
+import soundfile as sf # 引入 soundfile 用來做預先檢查
 
 # --- 設定參數 ---
 SAMPLE_RATE = 44100
-DURATION = 3.0      # 訓練時每次看 3 秒
-CHUNK_SIZE = int(SAMPLE_RATE * DURATION) # 3秒對應的樣本點數 (44100 * 3)
-BATCH_SIZE = 8      # 一次訓練幾筆資料
+DURATION = 3.0
+CHUNK_SIZE = int(SAMPLE_RATE * DURATION)
+SPEC_SHAPE = (1, 1024, 256) 
 
-# --- 1. 讀取並隨機切割的函式 (核心邏輯) ---
-def load_and_crop_wav(original_path, melody_path, accomp_path):
-    """
-    這就是你圖表中的 T(t) 隨機切分
-    輸入是完整的檔案路徑，輸出是切好的 3 秒波形 (numpy array)
-    """
-    # 由於 librosa 讀取太慢，且不支援 TF graph，我們通常用 tf.audio 或 soundfile
-    # 為了簡單起見，這裡演示邏輯。實際高效能訓練會用 tf.io.read_file + tf.audio.decode_wav
-    
-    # 這裡使用 NumPy wrapper 讓 librosa 可以跑在 TF dataset 裡
-    def _crop_numpy(orig_str, mel_str, acc_str):
-        # 轉回字串
-        orig_f = orig_str.decode('utf-8')
-        mel_f = mel_str.decode('utf-8')
-        acc_f = acc_str.decode('utf-8')
+class AudioDataset(Dataset):
+    def __init__(self, data_dir, type="train"):
+        self.raw_dir = os.path.join(data_dir, 'raw').replace('\\', '/')
+        self.mel_dir = os.path.join(data_dir, 'melody').replace('\\', '/')
+        self.acc_dir = os.path.join(data_dir, 'accomp').replace('\\', '/')
         
-        # 1. 取得音檔總長度 (不讀取整個檔案，只讀 header，速度快)
-        total_duration = librosa.get_duration(path=orig_f)
+        if not os.path.exists(self.raw_dir):
+            raise FileNotFoundError(f"找不到 raw 資料夾：{self.raw_dir}")
+
+        self.filenames = sorted([
+            f for f in os.listdir(self.raw_dir) 
+            if f.lower().endswith('.wav')
+        ])
         
-        # 2. 隨機決定開始時間 (Random Start)
-        if total_duration > DURATION:
-            max_start = total_duration - DURATION
-            start_time = np.random.uniform(0, max_start)
+        if len(self.filenames) == 0:
+            print(f"警告：在 {self.raw_dir} 找不到任何 .wav 檔案！")
         else:
-            start_time = 0
+            print(f"成功找到 {len(self.filenames)} 筆資料。")
 
-        # 3. 載入那 3 秒鐘 (Load Chunk)
-        # librosa 支援 offset (開始時間) 和 duration (長度)
-        X, _ = librosa.load(orig_f, sr=SAMPLE_RATE, offset=start_time, duration=DURATION)
-        Y_mel, _ = librosa.load(mel_f, sr=SAMPLE_RATE, offset=start_time, duration=DURATION)
-        Y_acc, _ = librosa.load(acc_f, sr=SAMPLE_RATE, offset=start_time, duration=DURATION)
+    def __len__(self):
+        return len(self.filenames)
+
+    def __getitem__(self, idx):
+        return self.load_with_retry(idx, retry_count=0)
+
+    def _log_error(self, error_msg):
+        log_file = "bad_files.txt"
+        existing_content = set()
+        if os.path.exists(log_file):
+            try:
+                with open(log_file, "r", encoding="utf-8") as f:
+                    existing_content = set(line.strip() for line in f)
+            except: pass
+
+        if error_msg not in existing_content:
+            try:
+                with open(log_file, "a", encoding="utf-8") as f:
+                    f.write(error_msg + "\n")
+            except: pass
+
+    # --- 新增：預先檢查函式 ---
+    def _validate_file(self, path):
+        """
+        使用 soundfile 快速檢查檔案是否損壞，防止 librosa 卡死
+        """
+        try:
+            with sf.SoundFile(path) as f:
+                # 檢查 1: 檔案是否能開啟
+                if not f.seekable():
+                    raise ValueError("檔案不支援 Seek (Not Seekable)")
+                
+                # 檢查 2: 嘗試跳到檔案末端 (這是抓出 psf_fseek failed 的關鍵)
+                f.seek(f.frames - 1)
+                f.read(1)
+        except Exception as e:
+            raise ValueError(f"檔案結構損壞 (SoundFile Check Failed): {e}")
+
+    def load_with_retry(self, idx, retry_count):
+        fname = self.filenames[idx]
         
-        # 確保長度一致 (如果不足 3 秒要補 0)
-        # ... (padding logic here if needed) ...
+        if retry_count > 5:
+            print(f"❌ 放棄檔案 {fname}")
+            return torch.zeros(SPEC_SHAPE), torch.zeros((2, 1024, 256))
+
+        orig_path = os.path.join(self.raw_dir, fname)
+        mel_path = os.path.join(self.mel_dir, fname)
+        acc_path = os.path.join(self.acc_dir, fname)
+
+        try:
+            # --- [關鍵修改：先做體檢，再讀取] ---
+            # 在交給 librosa 之前，先確認檔案沒爛掉，避免進入 audioread 卡死
+            self._validate_file(orig_path)
+            self._validate_file(mel_path)
+            self._validate_file(acc_path)
+
+            # 1. 取得長度
+            total_duration = librosa.get_duration(path=orig_path)
+            if total_duration == 0: raise ValueError("音訊長度為 0")
+
+            if total_duration > DURATION:
+                start_time = np.random.uniform(0, total_duration - DURATION)
+            else:
+                start_time = 0
+
+            # 2. 載入音訊
+            wav_orig, _ = librosa.load(orig_path, sr=SAMPLE_RATE, offset=start_time, duration=DURATION)
+            wav_mel, _ = librosa.load(mel_path, sr=SAMPLE_RATE, offset=start_time, duration=DURATION)
+            wav_acc, _ = librosa.load(acc_path, sr=SAMPLE_RATE, offset=start_time, duration=DURATION)
+
+            # 3. 檢查空資料
+            if len(wav_orig) < CHUNK_SIZE: # 這裡合併了空檢查與補零
+                wav_orig = librosa.util.fix_length(wav_orig, size=CHUNK_SIZE)
+                wav_mel = librosa.util.fix_length(wav_mel, size=CHUNK_SIZE)
+                wav_acc = librosa.util.fix_length(wav_acc, size=CHUNK_SIZE)
+            else:
+                wav_orig = wav_orig[:CHUNK_SIZE]
+                wav_mel = wav_mel[:CHUNK_SIZE]
+                wav_acc = wav_acc[:CHUNK_SIZE]
+
+            # 4. 轉頻譜圖
+            spec_orig = self.wav_to_spec(wav_orig)
+            spec_mel = self.wav_to_spec(wav_mel)
+            spec_acc = self.wav_to_spec(wav_acc)
+            target = torch.cat([spec_mel, spec_acc], dim=0) 
+            
+            return spec_orig, target
+
+        except Exception as e:
+            error_msg = f"{fname} | Error: {str(e)}"
+            self._log_error(error_msg)
+            
+            # 使用 print(..., end='\r') 讓錯誤訊息不要一直洗版，除非是新的錯誤
+            # print(f"⚠️ 跳過壞檔: {fname} ", end='\r') 
+            
+            new_idx = random.randint(0, len(self.filenames) - 1)
+            return self.load_with_retry(new_idx, retry_count + 1)
+
+    def wav_to_spec(self, wav):
+        stft = librosa.stft(wav, n_fft=2048, hop_length=512)
+        magnitude = np.abs(stft)
+        log_spec = np.log(magnitude + 1e-6)
+        log_spec = log_spec[:1024, :256]
         
-        # 簡單處理：如果長度不對直接丟棄或強制 resize (這裡略過細節)
-        if len(X) != CHUNK_SIZE:
-             # 邊界狀況處理...
-             pass 
+        if log_spec.shape[1] < 256:
+            pad_width = 256 - log_spec.shape[1]
+            log_spec = np.pad(log_spec, ((0,0), (0, pad_width)))
 
-        return X, Y_mel, Y_acc
-
-    # 使用 tf.numpy_function 包裝 python code
-    X, Y_mel, Y_acc = tf.numpy_function(
-        _crop_numpy, 
-        [original_path, melody_path, accomp_path], 
-        [tf.float32, tf.float32, tf.float32]
-    )
-    return X, Y_mel, Y_acc
-
-# --- 2. 轉頻譜圖 (STFT) ---
-def to_spectrogram(wave):
-    # 轉 STFT
-    stft = tf.signal.stft(wave, frame_length=2048, frame_step=512)
-    # 取能量 (Magnitude)
-    magnitude = tf.abs(stft)
-    # 轉 Log Scale (這對模型比較好學) -> 類似 dB
-    log_spectrogram = tf.math.log(magnitude + 1e-6)
-    # 增加一個通道維度 (為了符合 CNN 輸入 [H, W, 1])
-    return log_spectrogram[..., tf.newaxis]
-
-def process_pipeline(orig_path, mel_path, acc_path):
-    # A. 隨機切割
-    wav_orig, wav_mel, wav_acc = load_and_crop_wav(orig_path, mel_path, acc_path)
-    
-    # B. 轉圖片
-    spec_orig = to_spectrogram(wav_orig)
-    spec_mel = to_spectrogram(wav_mel)
-    spec_acc = to_spectrogram(wav_acc)
-    
-    # C. 正規化 (選用，將數值縮放到 0~1 或 -1~1)
-    # ...
-    
-    # 回傳 (Input, Target)
-    # Target 是一個 dict 或 tuple，對應模型的兩個輸出
-    return spec_orig, (spec_mel, spec_acc)
-
-# --- 3. 建立 Dataset 物件 (供油管線) ---
-def get_dataset(data_dir):
-    # 搜尋所有檔案
-    orig_files = sorted(glob.glob(os.path.join(data_dir, "*_original.wav")))
-    mel_files = sorted(glob.glob(os.path.join(data_dir, "*_melody.wav")))
-    acc_files = sorted(glob.glob(os.path.join(data_dir, "*_accompaniment.wav")))
-
-    # 建立 TensorFlow Dataset
-    ds = tf.data.Dataset.from_tensor_slices((orig_files, mel_files, acc_files))
-    
-    # 隨機打亂 (Shuffle)
-    ds = ds.shuffle(buffer_size=1000)
-    
-    # 套用處理流程 (Map) - 這裡會平行處理，加速讀取
-    ds = ds.map(process_pipeline, num_parallel_calls=tf.data.AUTOTUNE)
-    
-    # 批次打包 (Batch)
-    ds = ds.batch(BATCH_SIZE)
-    
-    # 預取 (Prefetch) - GPU 算的時候 CPU 預先準備下一批
-    ds = ds.prefetch(tf.data.AUTOTUNE)
-    
-    return ds
+        min_val = log_spec.min()
+        max_val = log_spec.max()
+        div = (max_val - min_val)
+        if div == 0: div = 1e-6
+        norm_spec = (log_spec - min_val) / (div + 1e-6)
+        tensor_spec = torch.tensor(norm_spec, dtype=torch.float32).unsqueeze(0)
+        return tensor_spec

@@ -1,99 +1,97 @@
-import tensorflow as tf
-from keras import layers, models
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
 
-def conv_block(inputs, filters):
-    """
-    基礎卷積塊：執行兩次卷積。
-    inputs: 輸入的張量
-    filters: 卷積核的數量 (特徵深度)
-    """
-    # 第一次卷積
-    x = layers.Conv2D(filters, (3, 3), padding="same")(inputs)
-    x = layers.BatchNormalization()(x) # 加速訓練，穩定收斂
-    x = layers.Activation("relu")(x)   # 引入非線性
+class DoubleConv(nn.Module):
+    """(convolution => [BN] => ReLU) * 2"""
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.double_conv = nn.Sequential(
+            # Padding=1 確保輸出的長寬不變 (Same Padding)
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        )
 
-    # 第二次卷積
-    x = layers.Conv2D(filters, (3, 3), padding="same")(x)
-    x = layers.BatchNormalization()(x)
-    x = layers.Activation("relu")(x)
+    def forward(self, x):
+        return self.double_conv(x)
 
-    return x
+class AudioUNet(nn.Module):
+    def __init__(self, n_channels=1, n_classes=2):
+        super(AudioUNet, self).__init__()
+        self.n_channels = n_channels
+        self.n_classes = n_classes
 
-def encoder_block(inputs, filters):
-    """
-    編碼器：提取特徵 (conv) -> 降採樣 (pool)
-    """
-    x = conv_block(inputs, filters)   # 提取特徵
-    p = layers.MaxPooling2D((2, 2))(x) # 圖片變小一半 (降採樣)
-    # x 透過 skip connection 傳給編碼器
-    # p 傳給下一層
-    return x, p  
+        # --- Encoder (Downscaling) ---
+        self.inc = DoubleConv(n_channels, 16)
+        self.down1 = DoubleConv(16, 32)
+        self.down2 = DoubleConv(32, 64)
+        self.down3 = DoubleConv(64, 128)
+        
+        # MaxPool
+        self.pool = nn.MaxPool2d(2)
 
+        # --- Bottleneck ---
+        self.bot = DoubleConv(128, 256)
 
-def decoder_block(inputs, skip_features, filters):
-    """
-    解碼器：上採樣 (transpose conv) -> 拼接 (concat) -> 提取特徵 (conv)
-    """
-    # 1. 上採樣 (圖片放大兩倍)
-    x = layers.Conv2DTranspose(filters, (2, 2), strides=(2, 2), padding="same")(inputs)
-    
-    # 2. 跳躍連接 (Skip Connection)
-    # 與編碼器保存的高解析度特徵 (skip_features) 合併
-    x = layers.concatenate([x, skip_features])
-    
-    # 3. 一次卷積融合特徵
-    x = conv_block(x, filters)
-    return x
+        # --- Decoder (Upscaling) ---
+        # 使用 Transpose Conv 放大
+        self.up1 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
+        self.conv1 = DoubleConv(256, 128) # 256 是因為 concat 之後通道變兩倍
+        
+        self.up2 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
+        self.conv2 = DoubleConv(128, 64)
+        
+        self.up3 = nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2)
+        self.conv3 = DoubleConv(64, 32)
+        
+        self.up4 = nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2)
+        self.conv4 = DoubleConv(32, 16)
 
-def build_audio_unet(input_shape):
-    """
-    組裝完整的 U-Net 模型
-    input_shape: 例如 (512, 128, 1) -> (頻率, 時間, 1)
-    """
-    inputs = layers.Input(input_shape)
+        # --- Output Layer ---
+        self.outc = nn.Conv2d(16, n_classes, kernel_size=1)
 
-    # --- [編碼器路徑 (Encoder)]：特徵越來越多，圖片越來越小 ---
-    # 假設輸入是 (512, 128, 1)
-    s1, p1 = encoder_block(inputs, 16)  # -> (256, 64, 16)
-    s2, p2 = encoder_block(p1, 32)      # -> (128, 32, 32)
-    s3, p3 = encoder_block(p2, 64)      # -> (64, 16, 64)
-    s4, p4 = encoder_block(p3, 128)     # -> (32, 8, 128)
+    def forward(self, x):
+        # x shape: (Batch, 1, 1024, 256)
+        
+        # Encoder
+        x1 = self.inc(x)            # -> (16, 1024, 256)
+        p1 = self.pool(x1)          # -> (16, 512, 128)
+        
+        x2 = self.down1(p1)         # -> (32, 512, 128)
+        p2 = self.pool(x2)          # -> (32, 256, 64)
+        
+        x3 = self.down2(p2)         # -> (64, 256, 64)
+        p3 = self.pool(x3)          # -> (64, 128, 32)
+        
+        x4 = self.down3(p3)         # -> (128, 128, 32)
+        p4 = self.pool(x4)          # -> (128, 64, 16)
+        
+        # Bottleneck
+        x5 = self.bot(p4)           # -> (256, 64, 16)
+        
+        # Decoder
+        # 1. Upsample
+        u1 = self.up1(x5)           # -> (128, 128, 32)
+        # 2. Concat (Skip Connection)
+        u1 = torch.cat([u1, x4], dim=1) 
+        # 3. Conv
+        u1 = self.conv1(u1)
 
-    # --- [瓶頸層 (Bottleneck)] ---
-    b1 = conv_block(p4, 256)            # -> (16, 4, 256)
+        u2 = self.up2(u1)
+        u2 = torch.cat([u2, x3], dim=1)
+        u2 = self.conv2(u2)
 
-    # --- [解碼器路徑 (Decoder)]：圖片越來越大，還原細節 ---
-    d1 = decoder_block(b1, s4, 128)     # 回到 (32, 8, 128)
-    d2 = decoder_block(d1, s3, 64)      # 回到 (64, 16, 64)
-    d3 = decoder_block(d2, s2, 32)      # 回到 (128, 32, 32)
-    d4 = decoder_block(d3, s1, 16)      # 回到 (256, 64, 16)
+        u3 = self.up3(u2)
+        u3 = torch.cat([u3, x2], dim=1)
+        u3 = self.conv3(u3)
 
-    # --- [輸出層 (Output)] ---
-    # 目標：輸出 2 張遮罩：一張給旋律，一張給伴奏
-    # 使用 Sigmoid 讓每個像素的值介於 0~1 之間 (代表能量保留的比例)
-    outputs = layers.Conv2D(2, (1, 1), padding="same", activation="sigmoid")(d4)
+        u4 = self.up4(u3)
+        u4 = torch.cat([u4, x1], dim=1)
+        u4 = self.conv4(u4)
 
-    # 建立模型
-    model = models.Model(inputs, outputs, name="Audio_UNet")
-    return model
-
-# 假設你在 model.py 裡寫了上面的程式碼
-# from model import build_audio_unet (如果你分開檔案的話)
-
-# 1. 定義輸入尺寸
-# 重要：U-Net 喜歡「2 的次方」，例如 256, 512, 1024。
-# 如果你的 STFT 是 1025 (librosa 預設)，你可能要切掉一行變成 1024。
-INPUT_SHAPE = (512, 256, 1)  # (頻率軸, 時間軸, 單聲道)
-
-# 2. 建立模型
-model = build_audio_unet(INPUT_SHAPE)
-
-# 3. 查看架構 (這步很重要，檢查有沒有報錯)
-model.summary()
-
-# 4. 編譯模型 (設定學習方式)
-# Optimizer: Adam 是最常用的
-# Loss: 'mae' (平均絕對誤差) 對還原頻譜圖效果不錯
-model.compile(optimizer="adam", loss="mae", metrics=["mae"])
-
-print("模型建置完成！引擎準備好了。")
+        logits = self.outc(u4)      # -> (2, 1024, 256)
+        return logits
