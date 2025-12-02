@@ -92,7 +92,7 @@ class AudioUNet(nn.Module):
         u4 = self.up4(u3)
         logits = self.outc(u4) # -> (Batch, 2, 1024, 256)
         
-        # 加上 Sigmoid，將數值壓在 0~1 之間，變成 "Mask"
-        masks = torch.softmax(logits, dim=1)
+        # 讓每個像素獨立預測自己的亮度 (0~1)，不要互斥
+        masks = torch.sigmoid(logits)
         
         return masks
