@@ -11,10 +11,10 @@ from utils.u_net import AudioUNet
 
 # --- 設定 ---
 DATA_DIR = r"C:\Users\richa\Documents\專題數據\midi_batch"
-CHECKPOINT_DIR = "./checkpoints"
+CHECKPOINT_DIR = "./checkpoints_softmax"
 BATCH_SIZE = 20
 EPOCHS = 50
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 5e-5
 LOG_INTERVAL = 20 # 每 20 個 Batch 印一次進度
 
 def main():
@@ -54,8 +54,12 @@ def main():
     )
 
     model = AudioUNet(n_channels=1, n_classes=2).to(device)
-    criterion = nn.L1Loss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    #手動計算loss
+    #頻率權重矩陣
+    freq_weights = torch.linspace(1.0, 5.0, steps=1024).to(device)
+    # 調整形狀以符合廣播機制: (Batch, Channel, Freq, Time) -> (1, 1, 1024, 1)
+    freq_weights = freq_weights.view(1, 1, 1024, 1)
 
     print(f"開始訓練！總共 {EPOCHS} 輪，每輪有 {len(train_loader)} 個 Batch。")
     print("-" * 60)
@@ -69,10 +73,23 @@ def main():
         for batch_idx, (data, target) in enumerate(train_loader):
             data = data.to(device)
             target = target.to(device)
+            #輸出是mask
+            pred_masks = model(data)
+            # 分離後的聲音 = 原曲 (data) * 濾鏡 (pred_masks)
+            # data 是 (B, 1, F, T)，pred_masks 是 (B, 2, F, T)，會自動廣播
+            separated_spectrograms = pred_masks * data
             
-            # Forward
-            predictions = model(data)
-            loss = criterion(predictions, target)
+            # ### 修改 4：計算加權 L1 Loss ###
+            # 原本是: L1 loss = criterion(predictions, target)
+            # -----------------------------------------------------------
+            # 1. 計算絕對誤差 |預測值 - 真實值|
+            abs_diff = torch.abs(separated_spectrograms - target)
+            # 2. 乘上頻率權重 (高頻錯誤會被放大)
+            weighted_diff = abs_diff * freq_weights
+            # 3. 取平均值當作 Loss
+            loss = torch.mean(weighted_diff)
+            
+            target = target.to(device)
             
             # Backward
             optimizer.zero_grad()

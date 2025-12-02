@@ -30,7 +30,7 @@ def main():
     
     # 3. 載入權重 (Load Weights)
     if os.path.exists(MODEL_PATH):
-        model.load_state_dict(torch.load(MODEL_PATH))
+        model.load_state_dict(torch.load(MODEL_PATH, weights_only=True))
         print(f"成功載入權重: {MODEL_PATH}")
     else:
         print(f"找不到權重檔: {MODEL_PATH}")
@@ -74,37 +74,57 @@ def main():
     # 6. 推論 (Inference)
     print("正在進行分離運算...")
     with torch.no_grad(): # 不計算梯度，省記憶體
-        pred = model(input_tensor)
+        pred_masks = model(input_tensor)
         
     # pred shape: (1, 2, 1024, Time) -> 2 個 Channel (Melody, Accomp)
-    pred = pred.cpu().numpy()[0] # 取出第一筆 batch -> (2, 1024, Time)
+    pred_masks = pred_masks.cpu().numpy()[0] # 取出第一筆 batch -> (2, 1024, Time)
 
     # 7. 後處理 (還原成聲音)
-    print("正在還原音訊...")
+    print("正在應用遮罩還原音訊...")
+    # --- [進階技巧]：互斥鎖定 (Sum Constraint) ---
+    # 強迫 mask_mel + mask_acc = 1
+    # 這能讓分離更乾淨，避免兩個都搶著要同一個聲音    
+    mask_mel = pred_masks[0]
+    mask_acc = pred_masks[1]
+    print("-" * 30)
+    print(f"Melody Mask -> Mean: {mask_mel.mean():.4f}, Max: {mask_mel.max():.4f}, Min: {mask_mel.min():.4f}")
+    print(f"Accomp Mask -> Mean: {mask_acc.mean():.4f}, Max: {mask_acc.max():.4f}, Min: {mask_acc.min():.4f}")
+    print("-" * 30)
+    
+    final_masks = [mask_mel, mask_acc]
     
     # 分別處理 Melody (Channel 0) 和 Accomp (Channel 1)
     for i, name in enumerate(['melody', 'accompaniment']):
         # 取出頻譜
-        p_spec = pred[i] 
+        mask = final_masks[i]
         
         # 去除剛剛補的 Padding
         if pad_len > 0:
-            p_spec = p_spec[:, :-pad_len]
+            mask = mask[:, :-pad_len]
             
-        # 反正規化 (Denormalize)
-        # 假設模型輸出的分佈跟輸入類似，我們用輸入的 min/max 還原
-        p_spec = p_spec * (max_val - min_val) + min_val
-        
-        # 轉回線性刻度 (Exp)
-        p_mag = np.exp(p_spec)
         
         # 補回第 1025 個頻率點 (用 0 補，或是複製第 1024 點)
         # 我們需要補一行讓它變回 1025
-        p_mag = np.vstack([p_mag, np.zeros((1, p_mag.shape[1]))])
+        mask = np.vstack([mask, np.zeros((1, mask.shape[1]))])
+        # D. [核心步驟] 應用遮罩
+        # 分離後的能量 = 原始能量 (Magnitude) * 遮罩 (Mask)
+        # 這樣做音質最好，因為我們直接操作原始訊號的能量
+        sep_magnitude = magnitude * mask
         
         # 結合原始相位 (使用 Phase Reconstruction)
         # 這是一種簡單的做法，假設分離後的相位跟原曲一樣
-        y_recon = librosa.istft(p_mag * phase, hop_length=512)
+        y_recon = librosa.istft(sep_magnitude * phase, hop_length=512)
+        
+        # --- [自動音量最大化] ---
+        # 1. 找出目前的音量最大值
+        max_amp = np.max(np.abs(y_recon))
+    
+        # 2. 如果聲音太小，就放大它
+        if max_amp > 0:
+            # 將最大值拉到 0.9 (保留一點點空間避免破音 clipping)
+            scale_factor = 0.9 / max_amp
+            y_recon = y_recon * scale_factor
+            print(f"  -> 已自動放大音量 (放大倍率: {scale_factor:.2f}x)")
         
         # 存檔
         save_name = os.path.join(OUTPUT_DIR, f"result_{name}.wav")

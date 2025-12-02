@@ -90,8 +90,9 @@ class AudioUNet(nn.Module):
         u3 = self.conv3(u3)
 
         u4 = self.up4(u3)
-        u4 = torch.cat([u4, x1], dim=1)
-        u4 = self.conv4(u4)
-
-        logits = self.outc(u4)      # -> (2, 1024, 256)
-        return logits
+        logits = self.outc(u4) # -> (Batch, 2, 1024, 256)
+        
+        # 加上 Sigmoid，將數值壓在 0~1 之間，變成 "Mask"
+        masks = torch.softmax(logits, dim=1)
+        
+        return masks
