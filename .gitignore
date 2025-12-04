@@ -231,3 +231,8 @@ melenv/
 
 #日誌 files
 *.log
+#環境檔
+/melenv/
+
+#輸出練習檔
+/wav_output/
