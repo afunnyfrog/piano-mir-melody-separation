@@ -14,11 +14,11 @@ OUTPUT_BASE_DIR = os.path.join(CURRENT_SCRIPT_DIR, "wav_output")
 
 # 【控制開關】限制處理數量 (測試用)
 # 設定為 5 先跑 5 個試試看，確認沒聲音且有檔案產出後，再改為 None
-TEST_LIMIT = 20
+TEST_LIMIT = 5
 
 DIR_MAPPING = [
-    (os.path.join(INPUT_BASE_DIR, "train_X_mix"), os.path.join(OUTPUT_BASE_DIR, "mix_audio_flac")),
-    (os.path.join(INPUT_BASE_DIR, "train_Y_melody"), os.path.join(OUTPUT_BASE_DIR, "melody_audio_flac")),
+    #(os.path.join(INPUT_BASE_DIR, "train_X_mix"), os.path.join(OUTPUT_BASE_DIR, "mix_audio_flac")),
+    #(os.path.join(INPUT_BASE_DIR, "train_Y_melody"), os.path.join(OUTPUT_BASE_DIR, "melody_audio_flac")),
     (os.path.join(INPUT_BASE_DIR, "train_Y_accomp"), os.path.join(OUTPUT_BASE_DIR, "accomp_audio_flac")),
 ]
 
