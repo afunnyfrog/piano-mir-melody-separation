@@ -14,20 +14,20 @@ SPEC_SHAPE = (1, 1024, 256)
 
 class AudioDataset(Dataset):
     def __init__(self, data_dir, type="train"):
-        self.raw_dir = os.path.join(data_dir, 'raw').replace('\\', '/')
-        self.mel_dir = os.path.join(data_dir, 'melody').replace('\\', '/')
-        self.acc_dir = os.path.join(data_dir, 'accomp').replace('\\', '/')
+        self.mix_dir = os.path.join(data_dir, 'mix_audio_flac')
+        self.mel_dir = os.path.join(data_dir, 'melody_audio_flac')
+        self.acc_dir = os.path.join(data_dir, 'accomp_audio_flac')
         
-        if not os.path.exists(self.raw_dir):
-            raise FileNotFoundError(f"找不到 raw 資料夾：{self.raw_dir}")
+        if not os.path.exists(self.mix_dir):
+            raise FileNotFoundError(f"找不到 mix 資料夾：{self.mix_dir}")
 
         self.filenames = sorted([
-            f for f in os.listdir(self.raw_dir) 
+            f for f in os.listdir(self.mix_dir) 
             if f.lower().endswith('.wav')
         ])
         
         if len(self.filenames) == 0:
-            print(f"警告：在 {self.raw_dir} 找不到任何 .wav 檔案！")
+            print(f"警告：在 {self.mix_dir} 找不到任何 .wav 檔案！")
         else:
             print(f"成功找到 {len(self.filenames)} 筆資料。")
 
@@ -76,7 +76,7 @@ class AudioDataset(Dataset):
             print(f"❌ 放棄檔案 {fname}")
             return torch.zeros(SPEC_SHAPE), torch.zeros((2, 1024, 256))
 
-        orig_path = os.path.join(self.raw_dir, fname)
+        orig_path = os.path.join(self.mix_dir, fname)
         mel_path = os.path.join(self.mel_dir, fname)
         acc_path = os.path.join(self.acc_dir, fname)
 

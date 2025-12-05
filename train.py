@@ -10,7 +10,7 @@ from utils.dataset import AudioDataset
 from utils.u_net import AudioUNet
 
 # --- 設定 ---
-DATA_DIR = r"C:\Users\richa\Documents\專題數據\midi_batch"
+DATA_DIR = r"C:\project_data\two_line_midi\flac_output"
 CHECKPOINT_DIR = "./checkpoints_direct_mse"
 BATCH_SIZE = 20
 EPOCHS = 50
