@@ -4,7 +4,8 @@ import librosa
 import numpy as np
 import os
 import random
-import soundfile as sf # 引入 soundfile 用來做預先檢查
+import soundfile as sf
+import pandas as pd
 
 # --- 設定參數 ---
 SAMPLE_RATE = 44100
@@ -12,27 +13,21 @@ DURATION = 3.0
 CHUNK_SIZE = int(SAMPLE_RATE * DURATION)
 SPEC_SHAPE = (1, 1024, 256) 
 
-class AudioDataset(Dataset):
-    def __init__(self, data_dir, type="train"):
-        self.mix_dir = os.path.join(data_dir, 'mix_audio_flac')
-        self.mel_dir = os.path.join(data_dir, 'melody_audio_flac')
-        self.acc_dir = os.path.join(data_dir, 'accomp_audio_flac')
-        
-        if not os.path.exists(self.mix_dir):
-            raise FileNotFoundError(f"找不到 mix 資料夾：{self.mix_dir}")
 
-        self.filenames = sorted([
-            f for f in os.listdir(self.mix_dir) 
-            if f.lower().endswith('.flac')
-        ])
+
+class AudioDataset(Dataset):
+    def __init__(self, csv_file, split="train"):
+        self.df = pd.read_csv(csv_file)
         
-        if len(self.filenames) == 0:
-            print(f"警告：在 {self.mix_dir} 找不到任何 flac 檔案！")
+        self.data_list = self.df[self.df['split_type'] == split]['file_path'].tolist() # <--- 修改這裡：只拿對應的檔案
+        
+        if len(self.data_list) == 0:
+            print(f"警告：在 {csv_file} 中找不到任何 {split} 的資料！")
         else:
-            print(f"成功找到 {len(self.filenames)} 筆資料。")
+            print(f"成功載入 {split} 資料集，共 {len(self.data_list)} 筆。")
 
     def __len__(self):
-        return len(self.filenames)
+        return len(self.data_list)
 
     def __getitem__(self, idx):
         return self.load_with_retry(idx, retry_count=0)
@@ -70,22 +65,28 @@ class AudioDataset(Dataset):
             raise ValueError(f"檔案結構損壞 (SoundFile Check Failed): {e}")
 
     def load_with_retry(self, idx, retry_count):
-        fname = self.filenames[idx]
+        # 2. 修改路徑取得邏輯
+        # CSV 裡面的 file_path 已經是完整路徑 (例如: /data/mix_audio_flac/song1_mixed.flac)
+        orig_path = self.data_list[idx] # <--- 修改這裡：直接從 list 拿路徑
+        fname = os.path.basename(orig_path) # 取得檔名用來報錯顯示
         
         if retry_count > 5:
             print(f"❌ 放棄檔案 {fname}")
             return torch.zeros(SPEC_SHAPE), torch.zeros((2, 1024, 256))
 
-        mel_fname = fname.replace('_mixed.flac', '_melody.flac')
-        acc_fname = fname.replace('_mixed.flac', '_accomp.flac')
-
-        orig_path = os.path.join(self.mix_dir, fname)
-        mel_path = os.path.join(self.mel_dir, mel_fname)
-        acc_path = os.path.join(self.acc_dir, acc_fname)
-
+        # 3. 推算 Melody 和 Accomp 的路徑
+        # 資料夾結構是平行的：
         try:
-            # --- [關鍵修改：先做體檢，再讀取] ---
-            # 在交給 librosa 之前，先確認檔案沒爛掉，避免進入 audioread 卡死
+            # 使用字串取代來切換資料夾和檔名後綴
+            # <--- 修改這裡：路徑推算邏輯
+            mel_path = orig_path.replace('mix_audio_flac', 'melody_audio_flac') \
+                                .replace('_mixed.flac', '_melody.flac')
+            
+            acc_path = orig_path.replace('mix_audio_flac', 'accomp_audio_flac') \
+                                .replace('_mixed.flac', '_accomp.flac')
+
+            # --- 以下邏輯保持不變 ---
+            # 檢查檔案
             self._validate_file(orig_path)
             self._validate_file(mel_path)
             self._validate_file(acc_path)
@@ -94,6 +95,7 @@ class AudioDataset(Dataset):
             total_duration = librosa.get_duration(path=orig_path)
             if total_duration == 0: raise ValueError("音訊長度為 0")
 
+            # [訓練策略] 訓練集隨機切，驗證集通常建議固定切(這裡先維持隨機沒關係，之後可優化)
             if total_duration > DURATION:
                 start_time = np.random.uniform(0, total_duration - DURATION)
             else:
@@ -104,8 +106,8 @@ class AudioDataset(Dataset):
             wav_mel, _ = librosa.load(mel_path, sr=SAMPLE_RATE, offset=start_time, duration=DURATION)
             wav_acc, _ = librosa.load(acc_path, sr=SAMPLE_RATE, offset=start_time, duration=DURATION)
 
-            # 3. 檢查空資料
-            if len(wav_orig) < CHUNK_SIZE: # 這裡合併了空檢查與補零
+            # 3. 補零或裁切 (Fix length)
+            if len(wav_orig) < CHUNK_SIZE:
                 wav_orig = librosa.util.fix_length(wav_orig, size=CHUNK_SIZE)
                 wav_mel = librosa.util.fix_length(wav_mel, size=CHUNK_SIZE)
                 wav_acc = librosa.util.fix_length(wav_acc, size=CHUNK_SIZE)
@@ -118,6 +120,7 @@ class AudioDataset(Dataset):
             spec_orig = self.wav_to_spec(wav_orig)
             spec_mel = self.wav_to_spec(wav_mel)
             spec_acc = self.wav_to_spec(wav_acc)
+            
             target = torch.cat([spec_mel, spec_acc], dim=0) 
             
             return spec_orig, target
@@ -126,10 +129,8 @@ class AudioDataset(Dataset):
             error_msg = f"{fname} | Error: {str(e)}"
             self._log_error(error_msg)
             
-            # 使用 print(..., end='\r') 讓錯誤訊息不要一直洗版，除非是新的錯誤
-            # print(f"⚠️ 跳過壞檔: {fname} ", end='\r') 
-            
-            new_idx = random.randint(0, len(self.filenames) - 1)
+            # 隨機換下一首嘗試
+            new_idx = random.randint(0, len(self.data_list) - 1)
             return self.load_with_retry(new_idx, retry_count + 1)
 
     def wav_to_spec(self, wav):

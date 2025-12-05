@@ -4,17 +4,22 @@ import torch.nn.functional as F
 
 class DoubleConv(nn.Module):
     """(convolution => [BN] => ReLU) * 2"""
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, dropout_rate=0.0):
         super().__init__()
-        self.double_conv = nn.Sequential(
-            # Padding=1 確保輸出的長寬不變 (Same Padding)
+        layers = [
             nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
             nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True)
-        )
+        ]
+        
+        # 2. 如果有設定 dropout_rate，就加進去
+        if dropout_rate > 0:
+            layers.append(nn.Dropout(dropout_rate))
+            
+        self.double_conv = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.double_conv(x)
@@ -29,13 +34,13 @@ class AudioUNet(nn.Module):
         self.inc = DoubleConv(n_channels, 16)
         self.down1 = DoubleConv(16, 32)
         self.down2 = DoubleConv(32, 64)
-        self.down3 = DoubleConv(64, 128)
+        self.down3 = DoubleConv(64, 128, dropout_rate=0.5)
         
         # MaxPool
         self.pool = nn.MaxPool2d(2)
 
         # --- Bottleneck ---
-        self.bot = DoubleConv(128, 256)
+        self.bot = DoubleConv(128, 256, dropout_rate=0.5)
 
         # --- Decoder (Upscaling) ---
         # 使用 Transpose Conv 放大
@@ -90,6 +95,8 @@ class AudioUNet(nn.Module):
         u3 = self.conv3(u3)
 
         u4 = self.up4(u3)
+        u4 = torch.cat([u4, x1], dim=1)
+        u4 = self.conv4(u4)
         logits = self.outc(u4) # -> (Batch, 2, 1024, 256)
         
         # 讓每個像素獨立預測自己的亮度 (0~1)，不要互斥

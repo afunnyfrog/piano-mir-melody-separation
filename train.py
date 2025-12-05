@@ -11,7 +11,7 @@ from utils.u_net import AudioUNet
 
 # --- 設定 ---
 DATA_DIR = r"C:\project_data\two_line_midi\flac_output"
-CHECKPOINT_DIR = "./checkpoints_direct_mse"
+CHECKPOINT_DIR = "./checkpoints_direct_L1"
 BATCH_SIZE = 20
 EPOCHS = 50
 LEARNING_RATE = 1e-3
@@ -25,51 +25,48 @@ def main():
         os.makedirs(CHECKPOINT_DIR)
 
     print("正在讀取資料集...")
-    train_dataset = AudioDataset(DATA_DIR)
-    
+    train_dataset = AudioDataset(csv_file="dataset.csv", split="train")
     train_loader = DataLoader(
         train_dataset, 
         batch_size=BATCH_SIZE, 
         shuffle=True, 
         
-        # --- 2. i5-14500 專屬加速設定 ---
-        # 設定為 6，剛好對應你的 6 個 P-core (效能核心)
-        # 不要設太大 (例如 12 或 14)，在 Windows 上反而會變慢
+        # --- i5-14500 專屬加速設定 ---
         num_workers=6,  
-        
-        # --- 3. 記憶體加速 ---
-        pin_memory=True,         # 必開：加速 CPU 傳顯存
-        
-        # --- 4. 保持活躍 (關鍵) ---
-        # 讓這 6 個 P-core 執行緒在 Epoch 結束後不解散
-        # 這樣下一個 Epoch 開始時就不用重新暖機，解決震盪問題
+        pin_memory=True,        
         persistent_workers=True, 
-        
-        # --- 5. 預先囤貨 ---
-        # 讓每個 Worker 預先多讀 3 份資料
-        # 6 workers * 3 = 18 份資料隨時準備好餵給 GPU
         prefetch_factor=3,
-        
-        drop_last=True
+        drop_last=True)
+    
+    val_dataset = AudioDataset(csv_file="dataset.csv", split="val")
+    val_loader = DataLoader(
+        val_dataset, 
+        batch_size=BATCH_SIZE, 
+        shuffle=False, # 驗證不需要打亂
+        num_workers=4, # 驗證通常比較快，worker 少一點沒關係
+        pin_memory=True
     )
+    
 
     model = AudioUNet(n_channels=1, n_classes=2).to(device)
-    criterion = nn.MSELoss()
+    criterion = nn.L1Loss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    
+    best_val_loss = float('inf')
 
     print(f"開始訓練！總共 {EPOCHS} 輪，每輪有 {len(train_loader)} 個 Batch。")
     print("-" * 60)
     
     for epoch in range(EPOCHS):
+        start_time = time.time() # 計時開始
         model.train()
         epoch_loss = 0
-        start_time = time.time() # 計時開始
-        
+        train_loss_accum = 0
         # --- 改用 enumerate，移除 tqdm ---
         for batch_idx, (data, target) in enumerate(train_loader):
             data = data.to(device)
             target = target.to(device)
-            # 這裡出來的 predictions 直接視為 "預測的 Log 頻譜圖"
+            # predictions 直接視為 "預測的 Log 頻譜圖"
             predictions = model(data)
             # ---  直接比較 (Direct Regression) ---
             # 不再乘回原曲 (Masking)，而是直接要求模型畫出跟 Target 一樣的圖
@@ -85,23 +82,49 @@ def main():
             
             # --- 控制輸出頻率 ---
             # 每 20 個 Batch 才印一次，或是最後一個 Batch 一定要印
-            if (batch_idx + 1) % LOG_INTERVAL == 0 or (batch_idx + 1) == len(train_loader):
-                # 計算經過時間
-                elapsed = time.time() - start_time
-                print(f"Epoch [{epoch+1}/{EPOCHS}] "
-                      f"Step [{batch_idx+1}/{len(train_loader)}] "
-                      f"Loss: {loss.item():.4f} "
-                      f"Time: {elapsed:.1f}s")
+            if (batch_idx + 1) % LOG_INTERVAL == 0:
+                print(f"[Epoch {epoch+1}/{EPOCHS}] [Batch {batch_idx+1}/{len(train_loader)}] "
+                      f"Train Loss: {loss.item():.4f}")
+        avg_train_loss = train_loss_accum / len(train_loader)
+        
+        # ===========================
+        #      Validation 階段
+        # ===========================
+        model.eval() # 切換模式 (重要！)
+        val_loss_accum = 0
+        
+        with torch.no_grad(): # 關閉梯度計算，節省記憶體
+            for data, target in val_loader:
+                data = data.to(device)
+                target = target.to(device)
+                
+                predictions = model(data)
+                loss = criterion(predictions, target)
+                val_loss_accum += loss.item()
+        
+        avg_val_loss = val_loss_accum / len(val_loader)
+        
+        # ===========================
+        #      結算與存檔
+        # ===========================
+        elapsed = time.time() - start_time
+        print(f"✅ End of Epoch {epoch+1} | Time: {elapsed:.1f}s")
+        print(f"   Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
 
-        # 每一輪結束的總結
-        avg_loss = epoch_loss / len(train_loader)
-        print(f"✅ Epoch {epoch+1} 完成! 平均 Loss: {avg_loss:.4f}")
+        # 策略 1: 保存最佳模型 (Best Checkpoint)
+        if avg_val_loss < best_val_loss:
+            print(f"   🏆 Validation Loss Improved ({best_val_loss:.4f} -> {avg_val_loss:.4f}). Saving model...")
+            best_val_loss = avg_val_loss
+            torch.save(model.state_dict(), os.path.join(CHECKPOINT_DIR, "best_model.pth"))
+        
+        # 策略 2: 定期保存 (例如每 10 輪存一次，或是只存最後一輪)
+        if (epoch + 1) % 10 == 0:
+            torch.save(model.state_dict(), os.path.join(CHECKPOINT_DIR, f"model_epoch_{epoch+1}.pth"))
+        
         print("-" * 60)
 
-        # 存檔
-        save_path = os.path.join(CHECKPOINT_DIR, f"model_epoch_{epoch+1}.pth")
-        torch.save(model.state_dict(), save_path)
-
+    # 訓練結束，存最後一個
+    torch.save(model.state_dict(), os.path.join(CHECKPOINT_DIR, "final_model.pth"))
     print("訓練全部完成！")
 
 if __name__ == "__main__":
