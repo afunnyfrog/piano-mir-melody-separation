@@ -230,7 +230,7 @@ __marimo__/
 *.log
 
 #環境檔
-/melenv/
+melenv/
 
 #輸出練習檔
 /wav_output/
