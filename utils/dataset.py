@@ -76,9 +76,12 @@ class AudioDataset(Dataset):
             print(f"❌ 放棄檔案 {fname}")
             return torch.zeros(SPEC_SHAPE), torch.zeros((2, 1024, 256))
 
+        mel_fname = fname.replace('_mixed.flac', '_melody.flac')
+        acc_fname = fname.replace('_mixed.flac', '_accomp.flac')
+
         orig_path = os.path.join(self.mix_dir, fname)
-        mel_path = os.path.join(self.mel_dir, fname)
-        acc_path = os.path.join(self.acc_dir, fname)
+        mel_path = os.path.join(self.mel_dir, mel_fname)
+        acc_path = os.path.join(self.acc_dir, acc_fname)
 
         try:
             # --- [關鍵修改：先做體檢，再讀取] ---
