@@ -60,7 +60,6 @@ def main():
     for epoch in range(EPOCHS):
         start_time = time.time() # 計時開始
         model.train()
-        epoch_loss = 0
         train_loss_accum = 0
         # --- 改用 enumerate，移除 tqdm ---
         for batch_idx, (data, target) in enumerate(train_loader):
@@ -78,7 +77,7 @@ def main():
             loss.backward()
             optimizer.step()
             
-            epoch_loss += loss.item()
+            train_loss_accum += loss.item()
             
             # --- 控制輸出頻率 ---
             # 每 20 個 Batch 才印一次，或是最後一個 Batch 一定要印
