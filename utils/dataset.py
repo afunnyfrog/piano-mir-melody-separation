@@ -23,11 +23,11 @@ class AudioDataset(Dataset):
 
         self.filenames = sorted([
             f for f in os.listdir(self.mix_dir) 
-            if f.lower().endswith('.wav')
+            if f.lower().endswith('.flac')
         ])
         
         if len(self.filenames) == 0:
-            print(f"警告：在 {self.mix_dir} 找不到任何 .wav 檔案！")
+            print(f"警告：在 {self.mix_dir} 找不到任何 flac 檔案！")
         else:
             print(f"成功找到 {len(self.filenames)} 筆資料。")
 
