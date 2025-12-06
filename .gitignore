@@ -213,6 +213,7 @@ __marimo__/
 *.mid
 *.midi
 *.npy
+*.flac
 
 # Machine learning artifacts
 /models/
@@ -227,3 +228,9 @@ __marimo__/
 
 #日誌 files
 *.log
+
+#環境檔
+melenv/
+
+#輸出練習檔
+/wav_output/
