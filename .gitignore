@@ -217,6 +217,7 @@ melenv/
 *.mid
 *.midi
 *.npy
+*.flac
 
 # Machine learning artifacts
 /models/
@@ -231,8 +232,9 @@ melenv/
 
 #日誌 files
 *.log
+
 #環境檔
-/melenv/
+melenv/
 
 #輸出練習檔
 /wav_output/

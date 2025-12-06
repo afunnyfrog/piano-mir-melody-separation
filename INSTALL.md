@@ -9,5 +9,8 @@
 
 * pip install --upgrade pip setuptools wheel
 * pip install -r requirements.txt # 安裝需求套件
+* 進入環境 `.\melenv\Scripts\activate`
 
 > 若有需要額外安裝的套件，請使用 pip install 套件名稱安裝
+
+* 更新安裝套件清單 `pip freeze > requirements.txt`
