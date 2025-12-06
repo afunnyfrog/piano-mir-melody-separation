@@ -30,8 +30,6 @@ def main():
         train_dataset, 
         batch_size=BATCH_SIZE, 
         shuffle=True, 
-        
-        # --- i5-14500 專屬加速設定 ---
         num_workers=6,  
         pin_memory=True,        
         persistent_workers=True, 
@@ -51,6 +49,13 @@ def main():
     model = AudioUNet(n_channels=1, n_classes=2).to(device)
     criterion = nn.L1Loss()
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, 
+        mode='min', 
+        factor=0.5, 
+        patience=5, 
+        verbose=True
+    )
     
     best_val_loss = float('inf')
 
@@ -59,18 +64,29 @@ def main():
     
     for epoch in range(EPOCHS):
         start_time = time.time() # 計時開始
+        # ===========================
+        #       Training 階段
+        # ===========================
         model.train()
         train_loss_accum = 0
         # --- 改用 enumerate，移除 tqdm ---
         for batch_idx, (data, target) in enumerate(train_loader):
             data = data.to(device)
             target = target.to(device)
+            
             # predictions 直接視為 "預測的 Log 頻譜圖"
             predictions = model(data)
-            # ---  直接比較 (Direct Regression) ---
-            # 不再乘回原曲 (Masking)，而是直接要求模型畫出跟 Target 一樣的圖
-            # 這樣最簡單，數學上最不會打架
-            loss = criterion(predictions, target)
+            # -拆分通道計算 Loss
+            # loss = |結果旋律 - 目標旋律|+|結果伴奏 - 目標伴奏|
+            pred_melody = predictions[:, 0, :, :]
+            pred_accomp = predictions[:, 1, :, :]
+        
+            target_melody = target[:, 0, :, :]
+            target_accomp = target[:, 1, :, :]
+        
+            loss_melody = criterion(pred_melody, target_melody)
+            loss_accomp = criterion(pred_accomp, target_accomp)
+            loss = 1.5*loss_melody + 1.0*loss_accomp
             
             # Backward
             optimizer.zero_grad()
@@ -98,7 +114,12 @@ def main():
                 target = target.to(device)
                 
                 predictions = model(data)
-                loss = criterion(predictions, target)
+                pred_melody = predictions[:, 0, :, :]
+                pred_accomp = predictions[:, 1, :, :]
+                target_melody = target[:, 0, :, :]
+                target_accomp = target[:, 1, :, :]
+            
+                loss = criterion(pred_melody, target_melody) + criterion(pred_accomp, target_accomp)
                 val_loss_accum += loss.item()
         
         avg_val_loss = val_loss_accum / len(val_loader)
@@ -106,9 +127,19 @@ def main():
         # ===========================
         #      結算與存檔
         # ===========================
-        elapsed = time.time() - start_time
-        print(f"✅ End of Epoch {epoch+1} | Time: {elapsed:.1f}s")
-        print(f"   Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+        if scheduler is not None:
+            scheduler.step(avg_val_loss)
+            curr_lr = optimizer.param_groups[0]['lr'] # 獲取當前 LR 方便列印
+        else:
+            curr_lr = 0.0
+
+        end_time = time.time()
+        epoch_duration = end_time - start_time
+    
+        print(f"\n=== Epoch {epoch+1} Summary ===")
+        print(f"Time: {epoch_duration:.2f}s | LR: {curr_lr:.6f}")
+        print(f"Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+        
 
         # 策略 1: 保存最佳模型 (Best Checkpoint)
         if avg_val_loss < best_val_loss:
@@ -126,5 +157,7 @@ def main():
     torch.save(model.state_dict(), os.path.join(CHECKPOINT_DIR, "final_model.pth"))
     print("訓練全部完成！")
 
-if __name__ == "__main__":
+if __name__ == "__main__":# ===========================
+    #       Training 階段
+    # ===========================
     main()
