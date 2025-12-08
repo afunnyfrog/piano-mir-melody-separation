@@ -9,8 +9,9 @@
     * (Windows)：````venv`\Scripts\activate```
     > ``venv``：可替換成你想要的虛擬環境名稱
 4. **必須開啟cmd**，並進入環境：```.\`venv`\Scripts\activate```
-5. 更新並最佳化pip以及python必要套件版本：```pip install --upgrade pip setuptools wheel```
-6. 安裝模型需求套件：```pip install -r requirements.txt```
+5. 進入環境後，終端機上會顯示``(`venv`) ...``，請確認已進入環境
+6. 更新並最佳化pip以及python必要套件版本：```pip install --upgrade pip setuptools wheel```
+7. 安裝模型需求套件：```pip install -r requirements.txt```
 
 > 若有需要額外安裝的套件，請使用 `pip install 套件名稱`後安裝
 
