@@ -12,7 +12,7 @@ from utils.loss import AudioSeparationLoss
 
 # --- 設定 ---
 DATA_DIR = r"C:\project_data\two_line_midi\flac_output"
-CHECKPOINT_DIR = "./checkpoints_direct_L1"
+CHECKPOINT_DIR = "./checkpoints_direct_L1_MSS"
 BATCH_SIZE = 20
 EPOCHS = 50
 LEARNING_RATE = 1e-3

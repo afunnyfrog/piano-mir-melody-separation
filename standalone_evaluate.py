@@ -397,7 +397,7 @@ if __name__ == "__main__":
     
     # 設定
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    CHECKPOINT_PATH = "./checkpoints_improved_loss/best_model.pth"
+    CHECKPOINT_PATH = r".\checkpoints_direct_L1\best_model.pth"
     BATCH_SIZE = 8
     
     # 載入測試資料
