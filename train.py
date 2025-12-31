@@ -3,215 +3,230 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader
 import os
-import time  # 新增時間計算功能
+import time
+from tqdm import tqdm
 
-# 引入我們剛寫好的模組
-from utils.dataset import AudioDataset
+# 引入自定義模組
+from utils.dataset import WeightedAudioDataset
+# from utils.dataset import DirectAudioDataset # 如果您改用 DirectAudioDataset，請打開這行並註解上面那行
 from utils.u_net import AudioUNet
-from utils.loss import AudioSeparationLoss 
+from utils.loss import AudioSeparationLoss
 
-# --- 設定 ---
-DATA_DIR = r"C:\project_data\two_line_midi\flac_output"
-CHECKPOINT_DIR = "./checkpoints_direct_L1"
-BATCH_SIZE = 20
-EPOCHS = 50
-LEARNING_RATE = 1e-3
-LOG_INTERVAL = 20 # 每 20 個 Batch 印一次進度
+# ==========================================
+#               參數設定
+# ==========================================
+# 指向您分類好的資料夾根目錄 (或是 flac_output，視您使用的 dataset class 而定)
+DATA_DIR = r"C:\Users\cebit\Desktop\專題生成\classified_dataset"
+CHECKPOINT_DIR = "./checkpoints_dynamic_8s"
+
+BATCH_SIZE = 16
+LEARNING_RATE = 5e-5
+SEGMENT_SECONDS = 2.0
+
+# ✨ [關鍵設定] 每個 Epoch 只隨機抽取 1000 筆資料
+SAMPLES_PER_EPOCH = 1000
+
+# ✨ [接續設定] 設定要接續的存檔路徑
+RESUME_FROM = os.path.join(CHECKPOINT_DIR, "best_model.pth")
+# RESUME_FROM = None # 如果要從頭開始，請取消註解這一行並註解上面那行
+
+# ✨ [新功能] 設定「這次要跑幾輪」
+# 每次執行程式，就會在目前的基礎上再多跑 10 輪
+RUN_EPOCHS = 20
+
+# ==========================================
 
 def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"使用裝置: {device}")
-    
+
     if not os.path.exists(CHECKPOINT_DIR):
         os.makedirs(CHECKPOINT_DIR)
 
-    print("正在讀取資料集...")
-    train_dataset = AudioDataset(csv_file="dataset.csv", split="train")
-    train_loader = DataLoader(
-        train_dataset, 
-        batch_size=BATCH_SIZE, 
-        shuffle=True, 
-        num_workers=6,  
-        pin_memory=True,        
-        persistent_workers=True, 
-        prefetch_factor=3,
-        drop_last=True)
-    
-    val_dataset = AudioDataset(csv_file="dataset.csv", split="val")
-    val_loader = DataLoader(
-        val_dataset, 
-        batch_size=BATCH_SIZE, 
-        shuffle=False, # 驗證不需要打亂
-        num_workers=4, # 驗證通常比較快，worker 少一點沒關係
-        pin_memory=True
-    )
-    
+    # ===========================
+    #    Dataset 與 DataLoader
+    # ===========================
+    print("正在初始化動態資料集...")
 
+    # 訓練集
+    train_dataset = WeightedAudioDataset(
+        root_dir=DATA_DIR,
+        split="train",
+        segment_seconds=SEGMENT_SECONDS,
+        samples_per_epoch=SAMPLES_PER_EPOCH
+    )
+
+    # 驗證集
+    val_dataset = WeightedAudioDataset(
+        root_dir=DATA_DIR,
+        split="val",
+        segment_seconds=SEGMENT_SECONDS,
+        samples_per_epoch=200
+    )
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=True,
+        num_workers=4,  # Windows 若報錯請改 0
+        pin_memory=True,
+        drop_last=True
+    )
+
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        drop_last=True
+    )
+
+    # ===========================
+    #        模型建置
+    # ===========================
     model = AudioUNet(n_channels=1, n_classes=2).to(device)
-    
+
     criterion = AudioSeparationLoss(
-        alpha_l1=1.0,        # L1 基礎權重
-        alpha_spectral=2.0,  # Multi-Scale Spectral 權重 (更重要)
-        alpha_sisdr=0.0,     # 暫時不使用時域 Loss (需要相位重建)
-        melody_weight=1.5,   # 旋律比伴奏更重要
-        accomp_weight=1.0
+        alpha_l1=1.0,
+        alpha_spectral=0.05,  # 給予極小的頻譜補償，確保旋律音質不會沙啞
+        melody_weight=5.0,  # ✨ 從 2.0 提升到 5.0：強迫模型優先學好旋律
+        accomp_weight=0.5  # ✨ 從 1.0 降低到 0.5：對伴奏的錯誤更有容忍度
     ).to(device)
-    
-    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
-    
+
+    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
+
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, 
-        mode='min', 
-        factor=0.5, 
-        patience=5, 
-        verbose=True
+        optimizer, mode='min', factor=0.5, patience=5, verbose=True
     )
-    """ 不同的學習率方式
-    scheduler = optim.lr_scheduler.OneCycleLR(
-        optimizer,
-        max_lr=LEARNING_RATE,
-        epochs=EPOCHS,
-        steps_per_epoch=len(train_loader),
-        pct_start=0.3,  # 前 30% 時間 warm-up
-        anneal_strategy='cos'
-    )
-    """
-    
+
+    # ===========================
+    #      斷點續訓邏輯 (修正版)
+    # ===========================
+    start_epoch = 0
     best_val_loss = float('inf')
 
-    print(f"開始訓練！總共 {EPOCHS} 輪，每輪有 {len(train_loader)} 個 Batch。")
+    if RESUME_FROM and os.path.exists(RESUME_FROM):
+        print(f"🔄 發現存檔，正在載入: {RESUME_FROM}")
+        try:
+            checkpoint = torch.load(RESUME_FROM, map_location=device)
+
+            # --- 自動判斷存檔格式 ---
+            if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+                # 新版完整存檔
+                model.load_state_dict(checkpoint['model_state_dict'])
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+
+                if 'scheduler_state_dict' in checkpoint:
+                    scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+
+                start_epoch = checkpoint['epoch']
+                if 'best_val_loss' in checkpoint:
+                    best_val_loss = checkpoint['best_val_loss']
+
+                print(f"✅ 完整載入成功！目前進度: 第 {start_epoch} 輪 (Best Loss: {best_val_loss:.4f})")
+
+            else:
+                # 舊版存檔
+                model.load_state_dict(checkpoint)
+                print(f"⚠️ 警告：舊版存檔 (無 Epoch 資訊)。將從第 1 輪開始。")
+
+        except Exception as e:
+            print(f"❌ 載入存檔失敗: {e}")
+            print("   將從頭開始訓練。")
+
+    else:
+        print("🆕 無存檔或路徑錯誤，將從頭開始訓練。")
+
+    # ===========================
+    #    ✨ [關鍵修改] 計算目標輪數
+    # ===========================
+    end_epoch = start_epoch + RUN_EPOCHS
+
     print("-" * 60)
-    
-    for epoch in range(EPOCHS):
-        start_time = time.time() # 計時開始
-        # ===========================
-        #       Training 階段
-        # ===========================
+    print(f"原本進度: {start_epoch} 輪")
+    print(f"這次任務: 再跑 {RUN_EPOCHS} 輪")
+    print(f"目標終點: 第 {end_epoch} 輪")
+    print("-" * 60)
+
+    # ===========================
+    #        訓練迴圈
+    # ===========================
+    # ✨ range 改為從 start_epoch 到 end_epoch
+    for epoch in range(start_epoch, end_epoch):
+        start_time = time.time()
+
+        # --- Training ---
         model.train()
         train_loss_accum = 0
-        train_loss_detail = {
-            'l1': 0, 'l1_melody': 0, 'l1_accomp': 0, 'spectral': 0
-        }
-        for batch_idx, (data, target) in enumerate(train_loader):
-            data = data.to(device)
-            target = target.to(device)
-            
-            # predictions 直接視為 "預測的 Log 頻譜圖"
-            predictions = model(data)
-            # 複合 Loss
-            loss, loss_dict = criterion(predictions, target)
-            # Backward
-            optimizer.zero_grad()
-            loss.backward()
-            
-            # 梯度剪裁
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=5.0)
-            
-            optimizer.step()
-            # scheduler.step() OneCycleLR方式
-            
-            train_loss_accum += loss.item()
-            for key in train_loss_detail.keys():
-                if key in loss_dict:
-                    train_loss_detail[key] += loss_dict[key]
-            
-            # --- 控制輸出頻率 ---
-            # 每 20 個 Batch 才印一次，或是最後一個 Batch 一定要印
-            if (batch_idx + 1) % LOG_INTERVAL == 0:
-                curr_lr = optimizer.param_groups[0]['lr']
-                print(f"[Epoch {epoch+1}/{EPOCHS}] [Batch {batch_idx+1}/{len(train_loader)}] "
-                      f"Loss: {loss.item():.4f} | LR: {curr_lr:.6f}")
-                print(f"  └─ L1: {loss_dict['l1']:.4f} (M:{loss_dict['l1_melody']:.4f} A:{loss_dict['l1_accomp']:.4f}) "
-                      f"Spectral: {loss_dict['spectral']:.4f}")
-        
-        avg_train_loss = train_loss_accum / len(train_loader)
-        for key in train_loss_detail.keys():
-            train_loss_detail[key] /= len(train_loader)
-        
-        # ===========================
-        #      Validation 階段
-        # ===========================
-        model.eval() # 切換模式 (重要！)
-        val_loss_accum = 0
-        val_loss_detail = {
-            'l1': 0, 'l1_melody': 0, 'l1_accomp': 0, 'spectral': 0
-        }
-        
-        with torch.no_grad(): # 關閉梯度計算，節省記憶體
-            for data, target in val_loader:
-                data = data.to(device)
-                target = target.to(device)
-                
-                predictions = model(data)
-                loss, loss_dict = criterion(predictions, target)
-            
-                val_loss_accum += loss.item()
-                for key in val_loss_detail.keys():
-                    if key in loss_dict:
-                        val_loss_detail[key] += loss_dict[key]
-        
-        avg_val_loss = val_loss_accum / len(val_loader)
-        for key in val_loss_detail.keys():
-            val_loss_detail[key] /= len(val_loader)
-        
-        # ===========================
-        #      結算與存檔
-        # ===========================
-        end_time = time.time()
-        epoch_duration = end_time - start_time
-        curr_lr = optimizer.param_groups[0]['lr']
-        
-        print(f"\n{'='*60}")
-        print(f"Epoch {epoch+1}/{EPOCHS} Summary")
-        print(f"{'='*60}")
-        print(f"⏱️  時間: {epoch_duration:.2f}s | 學習率: {curr_lr:.6f}")
-        print(f"📊 Train Loss: {avg_train_loss:.4f}")
-        print(f"   ├─ L1: {train_loss_detail['l1']:.4f} (M:{train_loss_detail['l1_melody']:.4f} A:{train_loss_detail['l1_accomp']:.4f})")
-        print(f"   └─ Spectral: {train_loss_detail['spectral']:.4f}")
-        print(f"📈 Val Loss: {avg_val_loss:.4f}")
-        print(f"   ├─ L1: {val_loss_detail['l1']:.4f} (M:{val_loss_detail['l1_melody']:.4f} A:{val_loss_detail['l1_accomp']:.4f})")
-        print(f"   └─ Spectral: {val_loss_detail['spectral']:.4f}")
-        
 
-        # 策略 1: 保存最佳模型 (Best Checkpoint)
+        # Progress bar 顯示目前的 Epoch / 目標 Epoch
+        progress_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{end_epoch}", leave=False)
+
+        for batch_idx, (data, target) in enumerate(progress_bar):
+            data, target = data.to(device), target.to(device)
+
+            optimizer.zero_grad()
+            predictions = model(data)
+            loss, _ = criterion(predictions, target)
+            loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+
+            optimizer.step()
+            train_loss_accum += loss.item()
+
+            progress_bar.set_postfix(loss=f"{loss.item():.4f}")
+
+        avg_train_loss = train_loss_accum / len(train_loader)
+
+        # --- Validation ---
+        model.eval()
+        val_loss_accum = 0
+        with torch.no_grad():
+            for data, target in val_loader:
+                data, target = data.to(device), target.to(device)
+                predictions = model(data)
+                loss, _ = criterion(predictions, target)
+                val_loss_accum += loss.item()
+
+        avg_val_loss = val_loss_accum / len(val_loader)
+        scheduler.step(avg_val_loss)
+
+        # --- Summary & Saving ---
+        duration = time.time() - start_time
+        print(
+            f"Epoch {epoch + 1} | Time: {duration:.1f}s | Train Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f}")
+
+        # 策略 1: 存最佳模型
         if avg_val_loss < best_val_loss:
-            improvement = best_val_loss - avg_val_loss
-            print(f"🏆 Validation Loss Improved by {improvement:.4f}! Saving model...")
             best_val_loss = avg_val_loss
-            
-            # 保存完整狀態
             torch.save({
                 'epoch': epoch + 1,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
                 'best_val_loss': best_val_loss,
-                'train_loss': avg_train_loss,
-                'val_loss': avg_val_loss,
             }, os.path.join(CHECKPOINT_DIR, "best_model.pth"))
-        # 策略 2: 定期保存 (例如每 10 輪存一次，或是只存最後一輪)
+            print("🏆 Best Model Saved!")
+
+        # 策略 2: 定期備份 (每 10 輪存一次檔名帶數字的)
+        # 注意：這邊建議用 epoch + 1 做判斷，而不是相對次數
         if (epoch + 1) % 10 == 0:
             torch.save({
                 'epoch': epoch + 1,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
-                'scheduler_state_dict': scheduler.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(), # 記得把 scheduler 也存進去
                 'val_loss': avg_val_loss,
-            }, os.path.join(CHECKPOINT_DIR, f"model_epoch_{epoch+1}.pth"))
-        
+            }, os.path.join(CHECKPOINT_DIR, f"model_epoch_{epoch + 1}.pth"))
+
         print("-" * 60)
 
-    # 訓練結束，存最後一個
-    torch.save({
-        'epoch': EPOCHS,
-        'model_state_dict': model.state_dict(),
-        'final_val_loss': avg_val_loss,
-    }, os.path.join(CHECKPOINT_DIR, "final_model.pth"))
-    print("=" * 60)
-    print("🎉 訓練全部完成！")
-    print(f"最佳 Validation Loss: {best_val_loss:.4f}")
-    print(f"模型已保存至: {CHECKPOINT_DIR}")
-    print("=" * 60)
+    print("="*60)
+    print(f"🎉 階段性任務完成！已跑完 {RUN_EPOCHS} 輪。")
+    print(f"目前總進度: {end_epoch} 輪。")
+    print("休息一下，下次繼續！")
 
 if __name__ == "__main__":
     main()
