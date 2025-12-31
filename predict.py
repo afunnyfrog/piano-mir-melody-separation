@@ -8,9 +8,9 @@ from utils.u_net import AudioUNet
 
 # --- 設定 ---
 # 這裡填寫你訓練好的權重檔案路徑
-MODEL_PATH = "./checkpoints/model_epoch_50.pth" 
+MODEL_PATH = "./checkpoints_dynamic_8s/best_model.pth"
 # 設定你要測試的歌曲路徑
-INPUT_AUDIO = r"C:\Users\richa\Documents\專題數據\maestro-v3.0.0\maestro-v3.0.0\2017\MIDI-Unprocessed_041_PIANO041_MID--AUDIO-split_07-06-17_Piano-e_1-01_wav--1.wav"
+INPUT_AUDIO = r"C:\Users\cebit\Desktop\專題生成\classified_dataset\balanced\mix_audio_flac\Soundtracks_Hollywood_Stockard Channing_There Are Worse Things I Could Do_mixed.flac"
 # 輸出的資料夾
 OUTPUT_DIR = "./results"
 
