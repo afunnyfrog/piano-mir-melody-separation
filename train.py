@@ -18,14 +18,20 @@ CHECKPOINT_DIR = "./checkpoints_multi_task"
 
 BATCH_SIZE = 24
 LEARNING_RATE = 5e-5
-RUN_EPOCHS = 20
+RUN_EPOCHS = 40
 PRINT_FREQ = 20  # 每 20 個 batch 輸出一次
 
+RESUME_BEST = False  # 是否繼承目前最佳權重
 RESUME_FROM = os.path.join(CHECKPOINT_DIR, "best_model.pth")
 
 # ==========================================
 
 def main():
+    # 解決某些環境下無法建立 torch kernel 快取目錄的問題
+    os.environ['PYTORCH_KERNEL_CACHE_PATH'] = os.path.join(os.getcwd(), '.torch_kernel_cache')
+    if not os.path.exists(os.environ['PYTORCH_KERNEL_CACHE_PATH']):
+        os.makedirs(os.environ['PYTORCH_KERNEL_CACHE_PATH'], exist_ok=True)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"使用裝置: {device}")
 
@@ -81,10 +87,11 @@ def main():
     start_epoch = 0
     best_val_loss = float('inf')
 
-    if RESUME_FROM and os.path.exists(RESUME_FROM):
+    if RESUME_BEST and RESUME_FROM and os.path.exists(RESUME_FROM):
         print(f"🔄 發現存檔，正在載入: {RESUME_FROM}")
         try:
-            checkpoint = torch.load(RESUME_FROM, map_location=device)
+            # 加入 weights_only=False 消除 FutureWarning
+            checkpoint = torch.load(RESUME_FROM, map_location=device, weights_only=False)
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             if 'scheduler_state_dict' in checkpoint:
@@ -94,6 +101,8 @@ def main():
             print(f"✅ 載入成功！目前進度: 第 {start_epoch} 輪")
         except Exception as e:
             print(f"❌ 載入存檔失敗: {e}，將從頭開始。")
+    elif not RESUME_BEST:
+        print("⏭️ 已設定不繼承權重，將從頭開始訓練。")
 
     end_epoch = start_epoch + RUN_EPOCHS
     print("-" * 40)
