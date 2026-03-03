@@ -36,9 +36,9 @@ def main():
     device = torch.device(USE_DEVICE if torch.cuda.is_available() else "cpu")
     print(f"使用裝置: {device}")
 
-    # 1. 載入模型架構 (3 輸入通道, 4 輸出通道)
-    print("正在初始化模型架構 (3 in, 4 out)...")
-    model = AudioUNet(n_channels=3, n_classes=4).to(device)
+    # 1. 載入模型架構 (3 輸入通道, 1 輸出通道: 僅伴奏)
+    print("正在初始化模型架構 (3 in, 1 out)...")
+    model = AudioUNet(n_channels=3, n_classes=1).to(device)
     
     # 2. 載入權重 (處理字典格式與 weights_only 警告)
     if os.path.exists(MODEL_PATH):
@@ -68,16 +68,15 @@ def main():
     midi_hints = torch.zeros((1, 2, TARGET_BINS, num_frames), dtype=torch.float32).to(device)
 
     # 5. 推論
-    print("正在進行分離運算 (無提示模式)...")
+    print("正在進行分離運算 (僅伴奏模式)...")
     with torch.no_grad():
         # 模型內部會自動處理 STFT 與 Padding
         preds = model(waveform_tensor, midi_hints)
         
-    # preds shape: (1, 4, 1024, Time)
-    # 通道索引: 0=Melody 音訊, 1=Accomp 音訊
+    # preds shape: (1, 1, 1024, Time)
+    # 通道索引: 0=Accomp 音訊
     preds = preds.cpu().numpy()[0] 
-    mask_mel = preds[0]
-    mask_acc = preds[1]
+    mask_acc = preds[0]
 
     # 6. 還原音訊
     print("正在還原音訊並儲存檔案...")
@@ -86,27 +85,27 @@ def main():
     phase = np.exp(1.j * np.angle(stft_full))
     
     # 對齊長度 (確保輸出遮罩與原始頻譜時間軸一致)
-    T_min = min(magnitude.shape[1], mask_mel.shape[1])
+    T_min = min(magnitude.shape[1], mask_acc.shape[1])
     magnitude = magnitude[:, :T_min]
     phase = phase[:, :T_min]
 
-    for mask, name in [(mask_mel, 'melody'), (mask_acc, 'accompaniment')]:
-        # 取得對應長度的遮罩並補回第 1025 點
-        current_mask = mask[:, :T_min]
-        full_mask = np.vstack([current_mask, np.zeros((1, T_min))])
-        
-        # 應用遮罩並執行反向 STFT
-        sep_mag = magnitude * full_mask
-        y_recon = librosa.istft(sep_mag * phase, hop_length=HOP_LENGTH)
-        
-        # 音量最大化 (避免聲音太小)
-        max_amp = np.max(np.abs(y_recon))
-        if max_amp > 1e-6:
-            y_recon = y_recon * (0.9 / max_amp)
-        
-        save_path = os.path.join(OUTPUT_DIR, f"{name}_no_hint.wav")
-        sf.write(save_path, y_recon, SAMPLE_RATE)
-        print(f"💾 已儲存: {save_path}")
+    # 處理伴奏遮罩
+    # 取得對應長度的遮罩並補回第 1025 點
+    current_mask = mask_acc[:, :T_min]
+    full_mask = np.vstack([current_mask, np.zeros((1, T_min))])
+    
+    # 應用遮罩並執行反向 STFT
+    sep_mag = magnitude * full_mask
+    y_recon = librosa.istft(sep_mag * phase, hop_length=HOP_LENGTH)
+    
+    # 音量最大化
+    max_amp = np.max(np.abs(y_recon))
+    if max_amp > 1e-6:
+        y_recon = y_recon * (0.9 / max_amp)
+    
+    save_path = os.path.join(OUTPUT_DIR, "accompaniment_no_hint.wav")
+    sf.write(save_path, y_recon, SAMPLE_RATE)
+    print(f"💾 已儲存: {save_path}")
 
     print("\n🎉 處理完成！請至結果資料夾檢查輸出。")
 

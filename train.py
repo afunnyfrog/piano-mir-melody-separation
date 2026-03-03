@@ -67,7 +67,7 @@ def main():
     # ===========================
     #        模型建置
     # ===========================
-    model = AudioUNet(n_channels=3, n_classes=4).to(device)
+    model = AudioUNet(n_channels=3, n_classes=1).to(device)
 
     criterion = AudioSeparationLoss(
         alpha_l1=1.0,

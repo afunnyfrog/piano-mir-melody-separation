@@ -26,63 +26,74 @@ class AudioSeparationLoss(nn.Module):
     def forward(self, pred, target, pred_audio=None, target_audio=None):
         """
         Args:
-            pred: [B, 2, F, T] 預測的頻譜圖 (旋律+伴奏)
-            target: [B, 2, F, T] 目標頻譜圖
-            pred_audio: [B, 2, L] 預測的時域音訊 (可選,用於 SI-SDR)
+            pred: [B, C, F, T] 預測的頻譜圖 (C=1: 僅伴奏, C=2: 旋律+伴奏)
+            target: [B, 4, F, T] 目標頻譜圖 (0=Melody, 1=Accomp)
+            pred_audio: [B, C, L] 預測的時域音訊 (可選)
             target_audio: [B, 2, L] 目標時域音訊 (可選)
-        
-        Returns:
-            total_loss: 總 Loss
-            loss_dict: 各項 Loss 的詳細數值 (用於監控)
         """
         
-        # 分離通道
-        pred_melody = pred[:, 0, :, :]      # [B, F, T]
-        pred_accomp = pred[:, 1, :, :]
-        target_melody = target[:, 0, :, :]
-        target_accomp = target[:, 1, :, :]
+        num_channels = pred.shape[1]
         
-        # ========================================
-        # 1. L1 Loss (基礎頻譜重建)
-        # ========================================
-        l1_melody = self.l1_loss(pred_melody, target_melody)
-        l1_accomp = self.l1_loss(pred_accomp, target_accomp)
-        l1_loss = self.melody_weight * l1_melody + self.accomp_weight * l1_accomp
-        
-        # ========================================
-        # 2. Multi-Scale Spectral Loss (多尺度感知)
-        # ========================================
-        spectral_loss_melody = self.multi_scale_spectral_loss(pred_melody, target_melody)
-        spectral_loss_accomp = self.multi_scale_spectral_loss(pred_accomp, target_accomp)
-        spectral_loss = (self.melody_weight * spectral_loss_melody + 
-                        self.accomp_weight * spectral_loss_accomp)
-        
-        # ========================================
-        # 3. SI-SDR Loss (時域感知質量)
-        # ========================================
-        if pred_audio is not None and target_audio is not None:
-            sisdr_melody = self.si_sdr_loss(pred_audio[:, 0], target_audio[:, 0])
-            sisdr_accomp = self.si_sdr_loss(pred_audio[:, 1], target_audio[:, 1])
-            sisdr_loss = self.melody_weight * sisdr_melody + self.accomp_weight * sisdr_accomp
+        if num_channels == 1:
+            # --- 僅伴奏模式 ---
+            pred_accomp = pred[:, 0, :, :]
+            target_accomp = target[:, 1, :, :] # 索引 1 是伴奏
+            
+            # 1. L1 Loss
+            l1_loss = self.l1_loss(pred_accomp, target_accomp) * self.accomp_weight
+            
+            # 2. Spectral Loss
+            spectral_loss = self.multi_scale_spectral_loss(pred_accomp, target_accomp) * self.accomp_weight
+            
+            # 3. SI-SDR Loss
+            if pred_audio is not None and target_audio is not None:
+                sisdr_loss = self.si_sdr_loss(pred_audio[:, 0], target_audio[:, 1]) * self.accomp_weight
+            else:
+                sisdr_loss = torch.tensor(0.0, device=pred.device)
+            
+            loss_dict = {
+                'total': 0.0,
+                'l1_accomp': l1_loss.item(),
+                'spectral_accomp': spectral_loss.item(),
+                'si_sdr_accomp': sisdr_loss.item()
+            }
         else:
-            sisdr_loss = torch.tensor(0.0, device=pred.device)
+            # --- 旋律 + 伴奏模式 (原本邏輯) ---
+            pred_melody = pred[:, 0, :, :]
+            pred_accomp = pred[:, 1, :, :]
+            target_melody = target[:, 0, :, :]
+            target_accomp = target[:, 1, :, :]
+            
+            l1_melody = self.l1_loss(pred_melody, target_melody)
+            l1_accomp = self.l1_loss(pred_accomp, target_accomp)
+            l1_loss = self.melody_weight * l1_melody + self.accomp_weight * l1_accomp
+            
+            spectral_loss_melody = self.multi_scale_spectral_loss(pred_melody, target_melody)
+            spectral_loss_accomp = self.multi_scale_spectral_loss(pred_accomp, target_accomp)
+            spectral_loss = (self.melody_weight * spectral_loss_melody + 
+                            self.accomp_weight * spectral_loss_accomp)
+            
+            if pred_audio is not None and target_audio is not None:
+                sisdr_melody = self.si_sdr_loss(pred_audio[:, 0], target_audio[:, 0])
+                sisdr_accomp = self.si_sdr_loss(pred_audio[:, 1], target_audio[:, 1])
+                sisdr_loss = self.melody_weight * sisdr_melody + self.accomp_weight * sisdr_accomp
+            else:
+                sisdr_loss = torch.tensor(0.0, device=pred.device)
+                
+            loss_dict = {
+                'total': 0.0,
+                'l1_melody': l1_melody.item(),
+                'l1_accomp': l1_accomp.item(),
+                'spectral': spectral_loss.item(),
+                'si_sdr': sisdr_loss.item() if isinstance(sisdr_loss, torch.Tensor) else 0.0
+            }
         
-        # ========================================
         # 總 Loss
-        # ========================================
         total_loss = (self.alpha_l1 * l1_loss + 
                      self.alpha_spectral * spectral_loss + 
                      self.alpha_sisdr * sisdr_loss)
         
-        # 返回詳細監控資訊
-        loss_dict = {
-            'total': total_loss.item(),
-            'l1': l1_loss.item(),
-            'l1_melody': l1_melody.item(),
-            'l1_accomp': l1_accomp.item(),
-            'spectral': spectral_loss.item(),
-            'si_sdr': sisdr_loss.item() if isinstance(sisdr_loss, torch.Tensor) else 0.0
-        }
+        loss_dict['total'] = total_loss.item()
         
         return total_loss, loss_dict
     

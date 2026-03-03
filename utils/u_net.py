@@ -24,7 +24,7 @@ class DoubleConv(nn.Module):
         return self.double_conv(x)
 
 class AudioUNet(nn.Module):
-    def __init__(self, n_channels=3, n_classes=4, n_fft=2048, hop_length=512):
+    def __init__(self, n_channels=3, n_classes=1, n_fft=2048, hop_length=512):
         super(AudioUNet, self).__init__()
         self.n_channels = n_channels
         self.n_classes = n_classes
