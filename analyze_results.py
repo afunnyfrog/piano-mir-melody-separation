@@ -8,11 +8,11 @@ import torch
 from torchmetrics.audio import ScaleInvariantSignalDistortionRatio
 from mir_eval.separation import bss_eval_sources
 
-pred_melody = r"F:\專題\piano-mir-melody-separation\results\result_melody.wav"
-pred_accomp = r"F:\專題\piano-mir-melody-separation\results\result_accompaniment.wav"
+pred_melody = r"F:\專題\piano-mir-melody-separation\results_no_hint\melody_no_hint.wav"
+pred_accomp = r"F:\專題\piano-mir-melody-separation\results_no_hint\accompaniment_no_hint.wav"
 
-gt_melody = r"F:\專題\piano-mir-melody-separation\results\Classical_Classical Era_Muzio Clementi_Sonatina-1_melody.flac"
-gt_accomp = r"F:\專題\piano-mir-melody-separation\results\Classical_Classical Era_Muzio Clementi_Sonatina-1_accomp.flac"
+gt_melody = r"G:\project_data\two_line_midi\flac_output\melody_audio_flac\Classical_Classical_Wolfgang Amadeus Mozart_Andante_melody.flac"
+gt_accomp = r"G:\project_data\two_line_midi\flac_output\accomp_audio_flac\Classical_Classical_Wolfgang Amadeus Mozart_Andante_accomp.flac"
 
 REPORT_PATH = "separation_report.csv"
 
