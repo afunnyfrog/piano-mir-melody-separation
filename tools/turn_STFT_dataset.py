@@ -153,7 +153,13 @@ class AudioDataset(Dataset):
             # 5. 組合 4 通道答案: [Audio_Mel, Audio_Acc, MIDI_Mel, MIDI_Acc]
             target = torch.cat([spec_mel, spec_acc, mask_mel, mask_acc], dim=0)
             
-            return torch.from_numpy(wav_orig), midi_hints, target
+            # 6. 組合目標時域音訊供 SI-SDR 使用: [Melody_Wav, Accomp_Wav]
+            target_audios = torch.cat([
+                torch.from_numpy(wav_mel).unsqueeze(0),
+                torch.from_numpy(wav_acc).unsqueeze(0)
+            ], dim=0)
+            
+            return torch.from_numpy(wav_orig), midi_hints, target, target_audios
 
         except Exception as e:
             self._log_error(f"{fname} | {str(e)}")
@@ -163,8 +169,14 @@ class AudioDataset(Dataset):
     def wav_to_spec(self, wav):
         stft = librosa.stft(wav, n_fft=CONFIG["N_FFT"], hop_length=CONFIG["HOP_LENGTH"])
         magnitude = np.abs(stft)
+        
+        # 使用 Log 轉換
         log_spec = np.log(magnitude + 1e-6)
         log_spec = log_spec[:CONFIG["TARGET_BINS"], :]
-        min_val, max_val = log_spec.min(), log_spec.max()
-        norm_spec = (log_spec - min_val) / (max_val - min_val + 1e-6)
+        
+        # 譜映射 (Spectral Mapping) 建議使用固定的縮放
+        # 這裡將 -10 (約 -80dB) 到 0 映射到 0~1 之間
+        # 這樣模型才能學會「音量絕對值」的映射關係
+        norm_spec = (log_spec + 10.0) / 10.0
+        
         return torch.tensor(norm_spec, dtype=torch.float32).unsqueeze(0)

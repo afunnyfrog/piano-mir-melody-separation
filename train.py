@@ -4,6 +4,9 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import os
 import time
+import matplotlib
+matplotlib.use('Agg') # 設為非互動式後端，防止多執行緒 GUI 錯誤
+import matplotlib.pyplot as plt
 
 # 引入自定義模組
 from tools.turn_STFT_dataset import AudioDataset
@@ -13,17 +16,35 @@ from utils.loss import AudioSeparationLoss
 # ==========================================
 #               參數設定
 # ==========================================
-CSV_FILE = "dataset.csv" 
+# 1. 資料與儲存設定
+CSV_FILE = "classical_dataset.csv" 
 CHECKPOINT_DIR = "./checkpoints_multi_task"
-
-BATCH_SIZE = 24
-LEARNING_RATE = 5e-5
-RUN_EPOCHS = 40
-PRINT_FREQ = 20  # 每 20 個 batch 輸出一次
-
 RESUME_BEST = False  # 是否繼承目前最佳權重
 RESUME_FROM = os.path.join(CHECKPOINT_DIR, "best_model.pth")
 
+# 2. 訓練超參數
+BATCH_SIZE = 16
+LEARNING_RATE = 5e-5
+WEIGHT_DECAY = 1e-4
+RUN_EPOCHS = 40
+ETA_MIN = 1e-6       # 學習率排程器的最小學習率
+
+# 3. 模型設定 (必須與訓練/推論一致)
+N_CHANNELS = 1       # 輸入通道: 1 代表僅讀取原始音訊頻譜 (移除 MIDI 遮罩)
+N_CLASSES = 1        # 輸出通道: 1 代表模型僅輸出一個通道 (對應到伴奏)
+
+# 4. 損失函數權重 (AudioSeparationLoss)
+ALPHA_L1 = 3.0
+ALPHA_SPECTRAL = 2.0
+ALPHA_SISDR = 3.0 
+MELODY_WEIGHT = 0.5
+ACCOMP_WEIGHT = 5.0
+
+# 5. 其他設定
+PRINT_FREQ = 20      # 每 20 個 batch 輸出一次進度
+NUM_WORKERS = 4      # DataLoader 的並行執行數
+PIN_MEMORY = True    # 加速 GPU 記憶體傳輸
+DROP_LAST = True     # 捨棄最後一個不完整的 batch
 # ==========================================
 
 def main():
@@ -50,42 +71,44 @@ def main():
         train_dataset,
         batch_size=BATCH_SIZE,
         shuffle=True,
-        num_workers=4,
-        pin_memory=True,
-        drop_last=True
+        num_workers=NUM_WORKERS,
+        pin_memory=PIN_MEMORY,
+        drop_last=DROP_LAST
     )
 
     val_loader = DataLoader(
         val_dataset,
         batch_size=BATCH_SIZE,
         shuffle=False,
-        num_workers=4,
-        pin_memory=True,
-        drop_last=True
+        num_workers=NUM_WORKERS,
+        pin_memory=PIN_MEMORY,
+        drop_last=DROP_LAST
     )
 
     # ===========================
     #        模型建置
     # ===========================
-    model = AudioUNet(n_channels=3, n_classes=1).to(device)
+    model = AudioUNet(n_channels=N_CHANNELS, n_classes=N_CLASSES).to(device)
 
+    # 設定損失函數
     criterion = AudioSeparationLoss(
-        alpha_l1=1.0,
-        alpha_spectral=0.05,
-        melody_weight=2.0,
-        accomp_weight=1.0
+        alpha_l1=ALPHA_L1,
+        alpha_spectral=ALPHA_SPECTRAL,
+        alpha_sisdr=ALPHA_SISDR, 
+        melody_weight=MELODY_WEIGHT,
+        accomp_weight=ACCOMP_WEIGHT
     ).to(device)
 
-    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.5, patience=5
-    )
+    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    # 變動學習率功能：餘弦退火策略
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=RUN_EPOCHS, eta_min=ETA_MIN)
 
     # ===========================
     #      斷點續訓邏輯
     # ===========================
     start_epoch = 0
     best_val_loss = float('inf')
+    train_history, val_history = [], []
 
     if RESUME_BEST and RESUME_FROM and os.path.exists(RESUME_FROM):
         print(f"🔄 發現存檔，正在載入: {RESUME_FROM}")
@@ -98,6 +121,8 @@ def main():
                 scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
             start_epoch = checkpoint['epoch']
             best_val_loss = checkpoint['best_val_loss']
+            train_history = checkpoint.get('train_history', [])
+            val_history = checkpoint.get('val_history', [])
             print(f"✅ 載入成功！目前進度: 第 {start_epoch} 輪")
         except Exception as e:
             print(f"❌ 載入存檔失敗: {e}，將從頭開始。")
@@ -117,20 +142,29 @@ def main():
         model.train()
         train_loss_accum = 0
 
-        for batch_idx, (waveforms, midi_hints, targets) in enumerate(train_loader):
+        for batch_idx, (waveforms, midi_hints, targets, target_audios) in enumerate(train_loader):
             waveforms = waveforms.to(device)
             midi_hints = midi_hints.to(device)
             targets = targets.to(device)
+            target_audios = target_audios.to(device)
 
             optimizer.zero_grad()
-            predictions = model(waveforms, midi_hints)
+            predictions, pred_audios = model(waveforms, midi_hints, return_audio=True)
             
             if predictions.shape[3] != targets.shape[3]:
                 min_time = min(predictions.shape[3], targets.shape[3])
                 predictions = predictions[:, :, :, :min_time]
                 targets = targets[:, :, :, :min_time]
 
-            loss, _ = criterion(predictions, targets)
+            # 傳入 pred_audio 與 target_audio 以啟用 SI-SDR Loss
+            loss, _ = criterion(predictions, targets, pred_audio=pred_audios, target_audio=target_audios)
+            
+            # ✨ [穩定性修正]：檢查 Loss 是否為 NaN
+            if torch.isnan(loss):
+                print(f"⚠️ 警告: 第 {epoch+1} 輪 Batch {batch_idx} 偵測到 NaN Loss，正在跳過...")
+                optimizer.zero_grad()
+                continue
+
             loss.backward()
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -143,29 +177,47 @@ def main():
                 print(f"Epoch [{epoch+1}/{end_epoch}] Batch [{batch_idx}/{len(train_loader)}] | Loss: {loss.item():.4f}")
 
         avg_train_loss = train_loss_accum / len(train_loader)
+        train_history.append(avg_train_loss)
 
         # --- Validation ---
         model.eval()
         val_loss_accum = 0
         with torch.no_grad():
-            for waveforms, midi_hints, targets in val_loader:
-                waveforms, midi_hints, targets = waveforms.to(device), midi_hints.to(device), targets.to(device)
-                predictions = model(waveforms, midi_hints)
+            for waveforms, midi_hints, targets, target_audios in val_loader:
+                waveforms = waveforms.to(device)
+                midi_hints = midi_hints.to(device)
+                targets = targets.to(device)
+                target_audios = target_audios.to(device)
+                
+                predictions, pred_audios = model(waveforms, midi_hints, return_audio=True)
                 
                 if predictions.shape[3] != targets.shape[3]:
                     min_time = min(predictions.shape[3], targets.shape[3])
                     predictions = predictions[:, :, :, :min_time]
                     targets = targets[:, :, :, :min_time]
                     
-                loss, _ = criterion(predictions, targets)
-                val_loss_accum += loss.item()
+                loss, _ = criterion(predictions, targets, pred_audio=pred_audios, target_audio=target_audios)
+                
+                # Validation NaN 處理 (不影響訓練，但需記錄)
+                if not torch.isnan(loss):
+                    val_loss_accum += loss.item()
 
         avg_val_loss = val_loss_accum / len(val_loader)
-        scheduler.step(avg_val_loss)
+        val_history.append(avg_val_loss)
 
-        # --- Summary & Saving ---
+        # 取得目前學習率並更新排程器
+        current_lr = optimizer.param_groups[0]['lr']
+        scheduler.step()
+
+        # --- Summary, Saving & Plotting ---
         duration = time.time() - start_time
-        print(f"==> Epoch {epoch + 1} | Time: {duration:.1f}s | Train: {avg_train_loss:.4f} | Val: {avg_val_loss:.4f}")
+        print(f"==> Epoch {epoch + 1} | Time: {duration:.1f}s | Train: {avg_train_loss:.4f} | Val: {avg_val_loss:.4f} | LR: {current_lr:.2e}")
+
+        # 繪製曲線
+        plt.figure(figsize=(10, 5))
+        plt.plot(train_history, label='Train Loss')
+        plt.plot(val_history, label='Val Loss')
+        plt.legend(); plt.grid(True); plt.savefig('loss_curve.png'); plt.close()
 
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
@@ -175,6 +227,8 @@ def main():
                 'optimizer_state_dict': optimizer.state_dict(),
                 'scheduler_state_dict': scheduler.state_dict(),
                 'best_val_loss': best_val_loss,
+                'train_history': train_history,
+                'val_history': val_history
             }, os.path.join(CHECKPOINT_DIR, "best_model.pth"))
             print("🏆 Best Model Saved!")
 
@@ -183,6 +237,8 @@ def main():
                 'epoch': epoch + 1,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'train_history': train_history,
+                'val_history': val_history
             }, os.path.join(CHECKPOINT_DIR, f"model_epoch_{epoch + 1}.pth"))
 
     print("="*60)
@@ -190,3 +246,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

@@ -26,74 +26,40 @@ class AudioSeparationLoss(nn.Module):
     def forward(self, pred, target, pred_audio=None, target_audio=None):
         """
         Args:
-            pred: [B, C, F, T] 預測的頻譜圖 (C=1: 僅伴奏, C=2: 旋律+伴奏)
-            target: [B, 4, F, T] 目標頻譜圖 (0=Melody, 1=Accomp)
-            pred_audio: [B, C, L] 預測的時域音訊 (可選)
-            target_audio: [B, 2, L] 目標時域音訊 (可選)
+            pred: [B, 1, F, T] 預測的伴奏頻譜圖
+            target: [B, 4, F, T] 目標頻譜圖 (1 是伴奏)
+            pred_audio: [B, 1, L] 預測的伴奏時域音訊
+            target_audio: [B, 2, L] 目標音訊 (1 是伴奏)
         """
         
-        num_channels = pred.shape[1]
+        # --- 僅針對伴奏 (Accompaniment) 進行計算 ---
+        pred_acc = pred[:, 0, :, :]
+        target_acc = target[:, 1, :, :] # 索引 1 是伴奏頻譜
         
-        if num_channels == 1:
-            # --- 僅伴奏模式 ---
-            pred_accomp = pred[:, 0, :, :]
-            target_accomp = target[:, 1, :, :] # 索引 1 是伴奏
-            
-            # 1. L1 Loss
-            l1_loss = self.l1_loss(pred_accomp, target_accomp) * self.accomp_weight
-            
-            # 2. Spectral Loss
-            spectral_loss = self.multi_scale_spectral_loss(pred_accomp, target_accomp) * self.accomp_weight
-            
-            # 3. SI-SDR Loss
-            if pred_audio is not None and target_audio is not None:
-                sisdr_loss = self.si_sdr_loss(pred_audio[:, 0], target_audio[:, 1]) * self.accomp_weight
-            else:
-                sisdr_loss = torch.tensor(0.0, device=pred.device)
-            
-            loss_dict = {
-                'total': 0.0,
-                'l1_accomp': l1_loss.item(),
-                'spectral_accomp': spectral_loss.item(),
-                'si_sdr_accomp': sisdr_loss.item()
-            }
+        # 1. L1 Loss
+        l1_loss = self.l1_loss(pred_acc, target_acc) * self.accomp_weight
+        
+        # 2. Spectral Loss
+        spec_loss = self.multi_scale_spectral_loss(pred_acc, target_acc) * self.accomp_weight
+        
+        # 3. SI-SDR Loss
+        if pred_audio is not None and target_audio is not None:
+            # 預測值索引 0 vs 目標值索引 1 (伴奏音訊)
+            sisdr_loss = self.si_sdr_loss(pred_audio[:, 0], target_audio[:, 1]) * self.accomp_weight
         else:
-            # --- 旋律 + 伴奏模式 (原本邏輯) ---
-            pred_melody = pred[:, 0, :, :]
-            pred_accomp = pred[:, 1, :, :]
-            target_melody = target[:, 0, :, :]
-            target_accomp = target[:, 1, :, :]
-            
-            l1_melody = self.l1_loss(pred_melody, target_melody)
-            l1_accomp = self.l1_loss(pred_accomp, target_accomp)
-            l1_loss = self.melody_weight * l1_melody + self.accomp_weight * l1_accomp
-            
-            spectral_loss_melody = self.multi_scale_spectral_loss(pred_melody, target_melody)
-            spectral_loss_accomp = self.multi_scale_spectral_loss(pred_accomp, target_accomp)
-            spectral_loss = (self.melody_weight * spectral_loss_melody + 
-                            self.accomp_weight * spectral_loss_accomp)
-            
-            if pred_audio is not None and target_audio is not None:
-                sisdr_melody = self.si_sdr_loss(pred_audio[:, 0], target_audio[:, 0])
-                sisdr_accomp = self.si_sdr_loss(pred_audio[:, 1], target_audio[:, 1])
-                sisdr_loss = self.melody_weight * sisdr_melody + self.accomp_weight * sisdr_accomp
-            else:
-                sisdr_loss = torch.tensor(0.0, device=pred.device)
-                
-            loss_dict = {
-                'total': 0.0,
-                'l1_melody': l1_melody.item(),
-                'l1_accomp': l1_accomp.item(),
-                'spectral': spectral_loss.item(),
-                'si_sdr': sisdr_loss.item() if isinstance(sisdr_loss, torch.Tensor) else 0.0
-            }
+            sisdr_loss = torch.tensor(0.0, device=pred.device)
         
-        # 總 Loss
+        # 總 Loss 計算
         total_loss = (self.alpha_l1 * l1_loss + 
-                     self.alpha_spectral * spectral_loss + 
+                     self.alpha_spectral * spec_loss + 
                      self.alpha_sisdr * sisdr_loss)
         
-        loss_dict['total'] = total_loss.item()
+        loss_dict = {
+            'total': total_loss.item(),
+            'l1': l1_loss.item(),
+            'spec': spec_loss.item(),
+            'sisdr': sisdr_loss.item()
+        }
         
         return total_loss, loss_dict
     
@@ -123,45 +89,36 @@ class AudioSeparationLoss(nn.Module):
     
     def si_sdr_loss(self, pred, target, eps=1e-8):
         """
-        Scale-Invariant Signal-to-Distortion Ratio (SI-SDR) Loss
-        
-        音源分離領域的黃金標準指標,對音量不敏感
-        
-        公式:
-        SI-SDR = 10 * log10(||s_target||^2 / ||e_noise||^2)
-        其中 s_target = <pred, target> / ||target||^2 * target
-             e_noise = pred - s_target
-        
-        參考論文: "SDR - Half-baked or Well Done?" (ICASSP 2019)
+        更穩定的 SI-SDR Loss 實作
         """
-        # 確保輸入是 2D [B, L]
-        if pred.dim() == 1:
-            pred = pred.unsqueeze(0)
-        if target.dim() == 1:
-            target = target.unsqueeze(0)
+        # 防止輸入含有 NaN 或 Inf
+        if torch.isnan(pred).any() or torch.isinf(pred).any() or \
+           torch.isnan(target).any() or torch.isinf(target).any():
+            return torch.tensor(0.0, device=pred.device, requires_grad=True)
+
+        if pred.dim() == 1: pred = pred.unsqueeze(0)
+        if target.dim() == 1: target = target.unsqueeze(0)
         
-        # Zero-mean normalization (重要!)
         pred = pred - pred.mean(dim=1, keepdim=True)
         target = target - target.mean(dim=1, keepdim=True)
         
-        # 計算投影係數 alpha = <pred, target> / ||target||^2
         dot_product = (pred * target).sum(dim=1, keepdim=True)
         target_energy = (target ** 2).sum(dim=1, keepdim=True) + eps
         alpha = dot_product / target_energy
         
-        # 投影信號 s_target
         s_target = alpha * target
-        
-        # 殘差信號 e_noise
         e_noise = pred - s_target
         
-        # 計算 SI-SDR (單位: dB)
-        signal_power = (s_target ** 2).sum(dim=1) + eps
-        noise_power = (e_noise ** 2).sum(dim=1) + eps
-        si_sdr = 10 * torch.log10(signal_power / noise_power)
+        signal_power = (s_target ** 2).sum(dim=1)
+        noise_power = (e_noise ** 2).sum(dim=1)
         
-        # 返回負值作為 Loss (要最大化 SI-SDR)
-        return -si_sdr.mean()
+        # ✨ [穩定性修正]：對功率進行 clamp，防止 log10(0) 或 log10(inf)
+        # 1e-10 約對應 -100dB, 1e10 約對應 100dB
+        sig_p = torch.clamp(signal_power, min=eps, max=1e10)
+        noi_p = torch.clamp(noise_power, min=eps, max=1e10)
+        
+        snr = 10 * (torch.log10(sig_p) - torch.log10(noi_p))
+        return -torch.clamp(snr, min=-50, max=50).mean()
 
 
 class SpectrogramReconstructor(nn.Module):

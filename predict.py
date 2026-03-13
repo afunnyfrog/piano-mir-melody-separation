@@ -11,20 +11,24 @@ from utils.u_net import AudioUNet
 # 1. 路徑設定
 MODEL_PATH = "./checkpoints_multi_task/best_model.pth"
 INPUT_AUDIO = r"G:\project_data\two_line_midi\flac_output\mix_audio_flac\Classical_Classical_Wolfgang Amadeus Mozart_Andante_mixed.flac"
-
-OUTPUT_DIR = "./results_no_hint"
+OUTPUT_DIR = "./results_accomp"
+OUTPUT_FILENAME = "accompaniment_no_hint.wav"
 
 # 2. 推論設定
 TEST_DURATION = 60.0  # 測試音訊長度 (秒)，設為 None 則處理整首
 USE_DEVICE = "cuda"   # "cuda" 或 "cpu"
 
-# 3. 音訊處理參數 (必須與訓練時一致)
+# 3. 模型設定 (必須與訓練時一致)
+N_CHANNELS = 1        # 輸入通道
+N_CLASSES = 1         # 輸出通道
+
+# 4. 音訊處理參數 (必須與訓練時一致)
 SAMPLE_RATE = 44100
 N_FFT = 2048
 HOP_LENGTH = 512
 TARGET_BINS = 1024
 
-# 4. 快取設定 (解決權限警告)
+# 5. 快取設定 (解決權限警告)
 os.environ['PYTORCH_KERNEL_CACHE_PATH'] = os.path.join(os.getcwd(), '.torch_kernel_cache')
 # ==========================================
 
@@ -36,9 +40,9 @@ def main():
     device = torch.device(USE_DEVICE if torch.cuda.is_available() else "cpu")
     print(f"使用裝置: {device}")
 
-    # 1. 載入模型架構 (3 輸入通道, 1 輸出通道: 僅伴奏)
-    print("正在初始化模型架構 (3 in, 1 out)...")
-    model = AudioUNet(n_channels=3, n_classes=1).to(device)
+    # 1. 載入模型架構
+    print(f"正在初始化模型架構 ({N_CHANNELS} in, {N_CLASSES} out)...")
+    model = AudioUNet(n_channels=N_CHANNELS, n_classes=N_CLASSES).to(device)
     
     # 2. 載入權重 (處理字典格式與 weights_only 警告)
     if os.path.exists(MODEL_PATH):
@@ -68,44 +72,43 @@ def main():
     midi_hints = torch.zeros((1, 2, TARGET_BINS, num_frames), dtype=torch.float32).to(device)
 
     # 5. 推論
-    print("正在進行分離運算 (僅伴奏模式)...")
+    print("正在進行分離運算 (譜映射生成模式)...")
     with torch.no_grad():
-        # 模型內部會自動處理 STFT 與 Padding
-        preds = model(waveform_tensor, midi_hints)
+        # 取得模型生成的頻譜 [1, 1, 1024, T]
+        mapped_spec = model(waveform_tensor, midi_hints).cpu().numpy()[0, 0]
         
-    # preds shape: (1, 1, 1024, Time)
-    # 通道索引: 0=Accomp 音訊
-    preds = preds.cpu().numpy()[0] 
-    mask_acc = preds[0]
+    print(f"DEBUG: 模型輸出最大值: {mapped_spec.max():.4f}, 最小值: {mapped_spec.min():.4f}")
+    if mapped_spec.max() < 1e-3:
+        print("⚠️ 警告：模型輸出幾乎全為零，可能需要更多訓練或檢查輸入！")
 
     # 6. 還原音訊
-    print("正在還原音訊並儲存檔案...")
+    print("正在從生成的頻譜還原音訊...")
     stft_full = librosa.stft(y, n_fft=N_FFT, hop_length=HOP_LENGTH)
-    magnitude = np.abs(stft_full)
     phase = np.exp(1.j * np.angle(stft_full))
+    T_min = min(phase.shape[1], mapped_spec.shape[1])
     
-    # 對齊長度 (確保輸出遮罩與原始頻譜時間軸一致)
-    T_min = min(magnitude.shape[1], mask_acc.shape[1])
-    magnitude = magnitude[:, :T_min]
-    phase = phase[:, :T_min]
-
-    # 處理伴奏遮罩
-    # 取得對應長度的遮罩並補回第 1025 點
-    current_mask = mask_acc[:, :T_min]
-    full_mask = np.vstack([current_mask, np.zeros((1, T_min))])
+    # --- 逆正規化 (必須與 Dataset 邏輯一致) ---
+    current_mapped = mapped_spec[:, :T_min]
+    # 逆向縮放： (norm * 10) - 10
+    log_recon = (current_mapped * 10.0) - 10.0
+    # 轉回線性 Magnitude
+    mag_recon = np.exp(log_recon)
     
-    # 應用遮罩並執行反向 STFT
-    sep_mag = magnitude * full_mask
-    y_recon = librosa.istft(sep_mag * phase, hop_length=HOP_LENGTH)
+    # 補回第 1025 點並結合原始相位
+    full_mag = np.vstack([mag_recon, np.zeros((1, T_min))])
+    y_recon = librosa.istft(full_mag * phase[:, :T_min], hop_length=HOP_LENGTH)
     
-    # 音量最大化
+    # 音量最大化 (增加防抖動處理)
     max_amp = np.max(np.abs(y_recon))
-    if max_amp > 1e-6:
+    if max_amp > 1e-7:
         y_recon = y_recon * (0.9 / max_amp)
+    else:
+        print("❌ 錯誤：還原後的波形振幅過小，無法輸出聲音。")
+        return
     
-    save_path = os.path.join(OUTPUT_DIR, "accompaniment_no_hint.wav")
+    save_path = os.path.join(OUTPUT_DIR, OUTPUT_FILENAME)
     sf.write(save_path, y_recon, SAMPLE_RATE)
-    print(f"💾 已儲存: {save_path}")
+    print(f"💾 已儲存生成結果: {save_path}")
 
     print("\n🎉 處理完成！請至結果資料夾檢查輸出。")
 
