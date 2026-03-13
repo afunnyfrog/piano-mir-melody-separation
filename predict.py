@@ -10,7 +10,7 @@ from utils.u_net import AudioUNet
 # ==========================================
 # 1. 路徑設定
 MODEL_PATH = "./checkpoints_multi_task/best_model.pth"
-INPUT_AUDIO = r"G:\project_data\two_line_midi\flac_output\mix_audio_flac\Classical_Classical_Wolfgang Amadeus Mozart_Andante_mixed.flac"
+INPUT_AUDIO = r"G:\project_data\two_line_midi\flac_output\mix_audio_flac\Classical_Classical_John Philip Sousa_Hands Across the Sea_mixed.flac"
 OUTPUT_DIR = "./results_accomp"
 OUTPUT_FILENAME = "accompaniment_no_hint.wav"
 

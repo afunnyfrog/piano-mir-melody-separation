@@ -27,18 +27,22 @@ BATCH_SIZE = 16
 LEARNING_RATE = 5e-5
 WEIGHT_DECAY = 1e-4
 RUN_EPOCHS = 40
+WARMUP_EPOCHS = 10      # 預熱 Epoch 數 
+T_0 = 10               # 每個週期的 Epoch 數 (固定，因為 T_MULT=1)
+T_MULT = 1             # 設定為 1，代表週期長度固定不變
 ETA_MIN = 1e-6       # 學習率排程器的最小學習率
 
 # 3. 模型設定 (必須與訓練/推論一致)
-N_CHANNELS = 1       # 輸入通道: 1 代表僅讀取原始音訊頻譜 (移除 MIDI 遮罩)
-N_CLASSES = 1        # 輸出通道: 1 代表模型僅輸出一個通道 (對應到伴奏)
+N_CHANNELS = 1       # 輸入通道: 1 代表僅讀取原始音訊頻譜
+N_CLASSES = 1        # 輸出通道: 1 代表模型輸出旋律遮罩
 
 # 4. 損失函數權重 (AudioSeparationLoss)
 ALPHA_L1 = 3.0
 ALPHA_SPECTRAL = 2.0
-ALPHA_SISDR = 3.0 
-MELODY_WEIGHT = 0.5
-ACCOMP_WEIGHT = 5.0
+ALPHA_SISDR = 5.0 
+ALPHA_SIMILARITY = 5.0 # 旋律/伴奏互斥相似度權重 (處罰伴奏中的旋律殘留)
+MELODY_WEIGHT = 1.0    # 被扣除部分的參考權重
+ACCOMP_WEIGHT = 7.5    # 伴奏擬合權重
 
 # 5. 其他設定
 PRINT_FREQ = 20      # 每 20 個 batch 輸出一次進度
@@ -94,14 +98,28 @@ def main():
     criterion = AudioSeparationLoss(
         alpha_l1=ALPHA_L1,
         alpha_spectral=ALPHA_SPECTRAL,
-        alpha_sisdr=ALPHA_SISDR, 
+        alpha_sisdr=ALPHA_SISDR,
+        alpha_similarity=ALPHA_SIMILARITY,
         melody_weight=MELODY_WEIGHT,
         accomp_weight=ACCOMP_WEIGHT
     ).to(device)
 
     optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-    # 變動學習率功能：餘弦退火策略
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=RUN_EPOCHS, eta_min=ETA_MIN)
+    
+    # 整合預熱機制
+    warmup_scheduler = optim.lr_scheduler.LinearLR(
+        optimizer, start_factor=0.1, end_factor=1.0, total_iters=WARMUP_EPOCHS
+    )
+    
+    main_scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=T_0, T_mult=T_MULT, eta_min=ETA_MIN
+    )
+    
+    scheduler = optim.lr_scheduler.SequentialLR(
+        optimizer, 
+        schedulers=[warmup_scheduler, main_scheduler], 
+        milestones=[WARMUP_EPOCHS]
+    )
 
     # ===========================
     #      斷點續訓邏輯
@@ -113,7 +131,6 @@ def main():
     if RESUME_BEST and RESUME_FROM and os.path.exists(RESUME_FROM):
         print(f"🔄 發現存檔，正在載入: {RESUME_FROM}")
         try:
-            # 加入 weights_only=False 消除 FutureWarning
             checkpoint = torch.load(RESUME_FROM, map_location=device, weights_only=False)
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
@@ -144,22 +161,22 @@ def main():
 
         for batch_idx, (waveforms, midi_hints, targets, target_audios) in enumerate(train_loader):
             waveforms = waveforms.to(device)
-            midi_hints = midi_hints.to(device)
             targets = targets.to(device)
             target_audios = target_audios.to(device)
 
             optimizer.zero_grad()
-            predictions, pred_audios = model(waveforms, midi_hints, return_audio=True)
+            # 模型現在回傳: pred_acc, pred_acc_audio, pred_mel_spec
+            predictions, pred_audios, pred_mels = model(waveforms, return_audio=True)
             
             if predictions.shape[3] != targets.shape[3]:
                 min_time = min(predictions.shape[3], targets.shape[3])
                 predictions = predictions[:, :, :, :min_time]
                 targets = targets[:, :, :, :min_time]
+                pred_mels = pred_mels[:, :, :, :min_time]
 
-            # 傳入 pred_audio 與 target_audio 以啟用 SI-SDR Loss
-            loss, _ = criterion(predictions, targets, pred_audio=pred_audios, target_audio=target_audios)
+            # 傳入所有輔助項進行 Loss 計算
+            loss, _ = criterion(predictions, targets, pred_audio=pred_audios, target_audio=target_audios, pred_mel=pred_mels)
             
-            # ✨ [穩定性修正]：檢查 Loss 是否為 NaN
             if torch.isnan(loss):
                 print(f"⚠️ 警告: 第 {epoch+1} 輪 Batch {batch_idx} 偵測到 NaN Loss，正在跳過...")
                 optimizer.zero_grad()
@@ -172,7 +189,6 @@ def main():
             
             train_loss_accum += loss.item()
             
-            # 每 PRINT_FREQ 次輸出進度
             if batch_idx % PRINT_FREQ == 0:
                 print(f"Epoch [{epoch+1}/{end_epoch}] Batch [{batch_idx}/{len(train_loader)}] | Loss: {loss.item():.4f}")
 
@@ -185,35 +201,31 @@ def main():
         with torch.no_grad():
             for waveforms, midi_hints, targets, target_audios in val_loader:
                 waveforms = waveforms.to(device)
-                midi_hints = midi_hints.to(device)
                 targets = targets.to(device)
                 target_audios = target_audios.to(device)
                 
-                predictions, pred_audios = model(waveforms, midi_hints, return_audio=True)
+                predictions, pred_audios, pred_mels = model(waveforms, return_audio=True)
                 
                 if predictions.shape[3] != targets.shape[3]:
                     min_time = min(predictions.shape[3], targets.shape[3])
                     predictions = predictions[:, :, :, :min_time]
                     targets = targets[:, :, :, :min_time]
+                    pred_mels = pred_mels[:, :, :, :min_time]
                     
-                loss, _ = criterion(predictions, targets, pred_audio=pred_audios, target_audio=target_audios)
+                loss, _ = criterion(predictions, targets, pred_audio=pred_audios, target_audio=target_audios, pred_mel=pred_mels)
                 
-                # Validation NaN 處理 (不影響訓練，但需記錄)
                 if not torch.isnan(loss):
                     val_loss_accum += loss.item()
 
         avg_val_loss = val_loss_accum / len(val_loader)
         val_history.append(avg_val_loss)
 
-        # 取得目前學習率並更新排程器
         current_lr = optimizer.param_groups[0]['lr']
         scheduler.step()
 
-        # --- Summary, Saving & Plotting ---
         duration = time.time() - start_time
         print(f"==> Epoch {epoch + 1} | Time: {duration:.1f}s | Train: {avg_train_loss:.4f} | Val: {avg_val_loss:.4f} | LR: {current_lr:.2e}")
 
-        # 繪製曲線
         plt.figure(figsize=(10, 5))
         plt.plot(train_history, label='Train Loss')
         plt.plot(val_history, label='Val Loss')
@@ -246,4 +258,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

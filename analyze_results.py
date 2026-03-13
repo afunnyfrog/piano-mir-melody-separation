@@ -26,8 +26,8 @@ PRED_MELODY_PATH = r"F:\專題\piano-mir-melody-separation\results_accomp\melody
 PRED_ACCOMP_PATH = r"F:\專題\piano-mir-melody-separation\results_accomp\accompaniment_no_hint.wav"
 
 # 真值 (Ground Truth) 檔案路徑
-GT_MELODY_PATH = r"G:\project_data\two_line_midi\flac_output\melody_audio_flac\Classical_Classical_Wolfgang Amadeus Mozart_Andante_melody.flac"
-GT_ACCOMP_PATH = r"G:\project_data\two_line_midi\flac_output\accomp_audio_flac\Classical_Classical_Wolfgang Amadeus Mozart_Andante_accomp.flac"
+GT_MELODY_PATH = r"G:\project_data\two_line_midi\flac_output\melody_audio_flac\Classical_Classical_John Philip Sousa_Hands Across the Sea_melody.flac"
+GT_ACCOMP_PATH = r"G:\project_data\two_line_midi\flac_output\accomp_audio_flac\Classical_Classical_John Philip Sousa_Hands Across the Sea_accomp.flac"
 # ==========================================
 # ==========================================
 
