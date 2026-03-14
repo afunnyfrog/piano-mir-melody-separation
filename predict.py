@@ -9,9 +9,9 @@ from utils.u_net import AudioUNet
 #               參數設定
 # ==========================================
 # 1. 路徑設定
-MODEL_PATH = "./checkpoints_multi_task/best_model.pth"
+MODEL_PATH = "./checkpoints_mel_task/best_model.pth"
 INPUT_AUDIO = r"G:\project_data\two_line_midi\flac_output\mix_audio_flac\Classical_Classical_John Philip Sousa_Hands Across the Sea_mixed.flac"
-OUTPUT_DIR = "./results_accomp"
+OUTPUT_DIR = "./results_mel_task"
 OUTPUT_FILENAME = "accompaniment_no_hint.wav"
 
 # 2. 推論設定
@@ -71,11 +71,11 @@ def main():
     num_frames = len(y) // HOP_LENGTH + 1
     midi_hints = torch.zeros((1, 2, TARGET_BINS, num_frames), dtype=torch.float32).to(device)
 
-    # 5. 推論
+    # 4. 推論
     print("正在進行分離運算 (譜映射生成模式)...")
     with torch.no_grad():
         # 取得模型生成的頻譜 [1, 1, 1024, T]
-        mapped_spec = model(waveform_tensor, midi_hints).cpu().numpy()[0, 0]
+        mapped_spec = model(waveform_tensor).cpu().numpy()[0, 0]
         
     print(f"DEBUG: 模型輸出最大值: {mapped_spec.max():.4f}, 最小值: {mapped_spec.min():.4f}")
     if mapped_spec.max() < 1e-3:

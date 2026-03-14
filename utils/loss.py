@@ -25,58 +25,57 @@ class AudioSeparationLoss(nn.Module):
         
         self.l1_loss = nn.L1Loss()
         
-    def forward(self, pred, target, pred_audio=None, target_audio=None, pred_mel=None):
+    def forward(self, pred, target, pred_audio=None, target_audio=None, pred_other=None):
         """
         Args:
-            pred: [B, 1, F, T] 預測的伴奏頻譜圖
-            target: [B, 4, F, T] 目標頻譜圖 (0: 旋律, 1: 伴奏)
-            pred_audio: [B, 1, L] 預測的伴奏時域音訊
+            pred: [B, 1, F, T] 預測的旋律頻譜圖 (Melody)
+            target: [B, 2, F, T] 目標頻譜圖 (0: 旋律, 1: 伴奏)
+            pred_audio: [B, 1, L] 預測的旋律時域音訊
             target_audio: [B, 2, L] 目標音訊 (0: 旋律, 1: 伴奏)
-            pred_mel: [B, 1, F, T] 預測的旋律頻譜圖 (被扣除的部分)
+            pred_other: [B, 1, F, T] 預測的伴奏頻譜圖 (被扣除的部分)
         """
         
         # --- 通道提取 ---
-        pred_acc = pred[:, 0, :, :]
-        target_acc = target[:, 1, :, :] 
+        pred_mel = pred[:, 0, :, :]
         target_mel = target[:, 0, :, :] 
+        target_acc = target[:, 1, :, :] 
         
-        # 1. 伴奏基礎擬合 Loss
-        l1_loss_acc = self.l1_loss(pred_acc, target_acc) * self.accomp_weight
-        spec_loss_acc = self.multi_scale_spectral_loss(pred_acc, target_acc) * self.accomp_weight
+        # 1. 旋律基礎擬合 Loss
+        l1_loss_mel = self.l1_loss(pred_mel, target_mel) * self.melody_weight
+        spec_loss_mel = self.multi_scale_spectral_loss(pred_mel, target_mel) * self.melody_weight
         
-        # 2. 旋律參考約束 (確保扣掉的東西確實像旋律)
-        if pred_mel is not None:
-            l1_loss_mel = self.l1_loss(pred_mel[:, 0], target_mel) * self.melody_weight
+        # 2. 伴奏參考約束 (確保扣掉的東西確實像伴奏)
+        if pred_other is not None:
+            l1_loss_acc = self.l1_loss(pred_other[:, 0], target_acc) * self.accomp_weight
         else:
-            l1_loss_mel = torch.tensor(0.0, device=pred.device)
+            l1_loss_acc = torch.tensor(0.0, device=pred.device)
             
-        # 3. 旋律-伴奏相似度懲罰 (Similarity Penalty)
-        # 我們希望預測的伴奏 (pred_acc) 與真實的旋律 (target_mel) 越不相似越好
-        p_acc_flat = pred_acc.reshape(pred_acc.size(0), -1)
-        t_mel_flat = target_mel.reshape(target_mel.size(0), -1)
+        # 3. 伴奏-旋律相似度懲罰 (Similarity Penalty)
+        # 我們希望預測的旋律 (pred_mel) 與真實的伴奏 (target_acc) 越不相似越好
+        p_mel_flat = pred_mel.reshape(pred_mel.size(0), -1)
+        t_acc_flat = target_acc.reshape(target_acc.size(0), -1)
         
-        # 使用餘弦相似度，只處罰正相關 (即伴奏裡有旋律殘留)
-        # 加上 1e-8 防止除以零
-        sim = F.cosine_similarity(p_acc_flat, t_mel_flat, dim=1).mean()
+        # 使用餘弦相似度，只處罰正相關 (即旋律裡有伴奏殘留)
+        sim = F.cosine_similarity(p_mel_flat, t_acc_flat, dim=1).mean()
         sim_loss = torch.clamp(sim, min=0.0) * self.alpha_similarity
 
-        # 4. SI-SDR Loss
+        # 4. SI-SDR Loss (針對旋律)
         if pred_audio is not None and target_audio is not None:
-            sisdr_loss = self.si_sdr_loss(pred_audio[:, 0], target_audio[:, 1]) * self.accomp_weight
+            sisdr_loss = self.si_sdr_loss(pred_audio[:, 0], target_audio[:, 0]) * self.melody_weight
         else:
             sisdr_loss = torch.tensor(0.0, device=pred.device)
         
         # 總 Loss 計算
-        total_loss = (self.alpha_l1 * l1_loss_acc + 
-                     self.alpha_spectral * spec_loss_acc + 
+        total_loss = (self.alpha_l1 * l1_loss_mel + 
+                     self.alpha_spectral * spec_loss_mel + 
                      self.alpha_sisdr * sisdr_loss +
-                     l1_loss_mel +
+                     l1_loss_acc +
                      sim_loss)
         
         loss_dict = {
             'total': total_loss.item(),
-            'l1_acc': l1_loss_acc.item(),
-            'mel_ref': l1_loss_mel.item(),
+            'l1_mel': l1_loss_mel.item(),
+            'acc_ref': l1_loss_acc.item(),
             'sim_penalty': sim_loss.item(),
             'sisdr': sisdr_loss.item()
         }

@@ -215,3 +215,51 @@ Classical_Classical_Pyotr Ilyich Tchaikovsky_Piano Concerto No1_mixed.flac | Siz
 Classical_Classical_Joseph Haydn_The Surprise Symphony_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 174786 but got size 176400 for tensor number 1 in the list.
 Classical_Classical_Gabriel Faure_Après un Rêve_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 160121 but got size 176400 for tensor number 1 in the list.
 Classical_Classical_Robert Schumann_Phantasictuck_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 169171 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Bela Bartok_The Lost Doll_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 174622 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Wolfgang Amadeus Mozart_Minuet by Mozart_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 169969 for tensor number 1 in the list.
+Classical_Classical_Robert Schumann_Caccia_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 169769 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Jean-Baptiste Lully_Minuet by Lully_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 174340 for tensor number 1 in the list.
+Classical_Classical_Johann Sebastian Bach_Invention in B flat_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 175475 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Joseph Haydn_Sonate I, II - Menuetto_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 170247 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Pyotr Ilyich Tchaikovsky_Piano Concerto No1_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 171409 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Johann Sebastian Bach_Das Wohltemperierte Clavier I, Fuga XVII_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 175998 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Richard Wagner_Pilgrims Chorus_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 170186 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Wolfgang Amadeus Mozart_Elvira Madigan_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 174420 for tensor number 1 in the list.
+Classical_Classical_Robert Schumann_10Le gai laboureur_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 170200 for tensor number 1 in the list.
+Classical_Classical_Frederic Chopin_Nocturne_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 170353 for tensor number 1 in the list.
+Classical_Classical_Wolfgang Amadeus Mozart_Sonate for Violin and Piano K 379 3_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 150728 for tensor number 1 in the list.
+Classical_Classical_Wolfgang Amadeus Mozart_Air_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 169478 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Johann Sebastian Bach_Das Wohltemperierte Clavier I, Praeludium XI_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 145707 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Joseph Haydn_The Surprise Symphony_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 172540 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Ludwig van Beethoven_Ecossaise_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 171463 for tensor number 1 in the list.
+Classical_Classical_Frederic Chopin_Etüde c-moll Opus 10 No 12_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 166743 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Giuseppe Verdi_La Traviata - N2 Brindisi_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 147198 for tensor number 1 in the list.
+Classical_Classical_Georges Bizet_Toreadors March_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 171926 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Ludwig van Beethoven_Prelude Op WoO 55_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 145181 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Johann Sebastian Bach_Das Wohltemperierte Clavier II, Fuga IX_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 172903 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Gabriel Faure_Les roses d 19Ispahan_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 173887 for tensor number 1 in the list.
+Classical_Classical_George Frideric Handel_Ouvertuere_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 144997 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Joseph Haydn_27 Nemet Tanc - Deutscher Tanz_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 170966 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Charles Gounod_Funeral_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 173813 for tensor number 1 in the list.
+Classical_Classical_Johann Sebastian Bach_Invention 10, BWV 781_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 170550 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Johann Sebastian Bach_Das Wohltemperierte Clavier I, Praeludium XI_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 142569 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Johann Sebastian Bach_Loure 1_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 153468 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Bela Bartok_Canon at the Lower Fifth_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 173147 for tensor number 1 in the list.
+Classical_Classical_Georges Bizet_Entracte_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 162020 for tensor number 1 in the list.
+Classical_Classical_Richard Strauss_Also sprach Zarathustra_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 172612 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_George Frideric Handel_Ouvertuere_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 163962 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Pietro Mascagni_Intermezzo_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 163038 for tensor number 1 in the list.
+Classical_Classical_Johann Sebastian Bach_Courante_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 164389 for tensor number 1 in the list.
+Classical_Classical_George Frideric Handel_Ouvertuere_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176029 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Joseph Haydn_German Dance 2_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 174192 for tensor number 1 in the list.
+Classical_Classical_Pyotr Ilyich Tchaikovsky_Waltz from Symphony No5_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 168745 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Georges Bizet_Entracte_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 167101 for tensor number 1 in the list.
+Classical_Classical_Wolfgang Amadeus Mozart_Minuet by Mozart_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 172592 for tensor number 1 in the list.
+Classical_Classical_Johann Sebastian Bach_Polonaise in D minor_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 175952 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Joseph Haydn_Serenade(From String Quartet No5)_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 158079 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Pyotr Ilyich Tchaikovsky_Swan Lake Waltz_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 169202 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Franz Schubert_Ungarische Melodie_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 148806 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Felix Mendelssohn_Lied Ohne Worte_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 150787 for tensor number 1 in the list.
+Classical_Classical_Robert Schumann_The Happy Farmer_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 176400 but got size 173690 for tensor number 1 in the list.
+Classical_Classical_Frederic Chopin_Prelude Op 28 No 4_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 150621 but got size 176400 for tensor number 1 in the list.
+Classical_Classical_Frederic Chopin_Etüde As-Dur Op 25  No 1_mixed.flac | Sizes of tensors must match except in dimension 0. Expected size 159806 but got size 176400 for tensor number 1 in the list.

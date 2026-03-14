@@ -18,7 +18,7 @@ from utils.loss import AudioSeparationLoss
 # ==========================================
 # 1. 資料與儲存設定
 CSV_FILE = "classical_dataset.csv" 
-CHECKPOINT_DIR = "./checkpoints_multi_task"
+CHECKPOINT_DIR = "./checkpoints_mel_task"
 RESUME_BEST = False  # 是否繼承目前最佳權重
 RESUME_FROM = os.path.join(CHECKPOINT_DIR, "best_model.pth")
 
@@ -40,9 +40,9 @@ N_CLASSES = 1        # 輸出通道: 1 代表模型輸出旋律遮罩
 ALPHA_L1 = 3.0
 ALPHA_SPECTRAL = 2.0
 ALPHA_SISDR = 5.0 
-ALPHA_SIMILARITY = 5.0 # 旋律/伴奏互斥相似度權重 (處罰伴奏中的旋律殘留)
-MELODY_WEIGHT = 1.0    # 被扣除部分的參考權重
-ACCOMP_WEIGHT = 7.5    # 伴奏擬合權重
+ALPHA_SIMILARITY = 5.0 # 伴奏/旋律互斥相似度權重 (處罰旋律中的伴奏殘留)
+MELODY_WEIGHT = 7.5    # 旋律擬合權重 (現在是主要目標)
+ACCOMP_WEIGHT = 1.0    # 被扣除伴奏部分的參考權重
 
 # 5. 其他設定
 PRINT_FREQ = 20      # 每 20 個 batch 輸出一次進度
@@ -159,23 +159,23 @@ def main():
         model.train()
         train_loss_accum = 0
 
-        for batch_idx, (waveforms, midi_hints, targets, target_audios) in enumerate(train_loader):
+        for batch_idx, (waveforms, targets, target_audios) in enumerate(train_loader):
             waveforms = waveforms.to(device)
             targets = targets.to(device)
             target_audios = target_audios.to(device)
 
             optimizer.zero_grad()
-            # 模型現在回傳: pred_acc, pred_acc_audio, pred_mel_spec
-            predictions, pred_audios, pred_mels = model(waveforms, return_audio=True)
+            # 模型現在回傳: pred_mel, pred_mel_audio, pred_acc_spec
+            predictions, pred_audios, pred_others = model(waveforms, return_audio=True)
             
             if predictions.shape[3] != targets.shape[3]:
                 min_time = min(predictions.shape[3], targets.shape[3])
                 predictions = predictions[:, :, :, :min_time]
                 targets = targets[:, :, :, :min_time]
-                pred_mels = pred_mels[:, :, :, :min_time]
+                pred_others = pred_others[:, :, :, :min_time]
 
             # 傳入所有輔助項進行 Loss 計算
-            loss, _ = criterion(predictions, targets, pred_audio=pred_audios, target_audio=target_audios, pred_mel=pred_mels)
+            loss, _ = criterion(predictions, targets, pred_audio=pred_audios, target_audio=target_audios, pred_other=pred_others)
             
             if torch.isnan(loss):
                 print(f"⚠️ 警告: 第 {epoch+1} 輪 Batch {batch_idx} 偵測到 NaN Loss，正在跳過...")
@@ -199,20 +199,20 @@ def main():
         model.eval()
         val_loss_accum = 0
         with torch.no_grad():
-            for waveforms, midi_hints, targets, target_audios in val_loader:
+            for waveforms, targets, target_audios in val_loader:
                 waveforms = waveforms.to(device)
                 targets = targets.to(device)
                 target_audios = target_audios.to(device)
                 
-                predictions, pred_audios, pred_mels = model(waveforms, return_audio=True)
+                predictions, pred_audios, pred_others = model(waveforms, return_audio=True)
                 
                 if predictions.shape[3] != targets.shape[3]:
                     min_time = min(predictions.shape[3], targets.shape[3])
                     predictions = predictions[:, :, :, :min_time]
                     targets = targets[:, :, :, :min_time]
-                    pred_mels = pred_mels[:, :, :, :min_time]
+                    pred_others = pred_others[:, :, :, :min_time]
                     
-                loss, _ = criterion(predictions, targets, pred_audio=pred_audios, target_audio=target_audios, pred_mel=pred_mels)
+                loss, _ = criterion(predictions, targets, pred_audio=pred_audios, target_audio=target_audios, pred_other=pred_others)
                 
                 if not torch.isnan(loss):
                     val_loss_accum += loss.item()

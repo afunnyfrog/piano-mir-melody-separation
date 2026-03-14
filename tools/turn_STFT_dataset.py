@@ -100,10 +100,10 @@ class AudioDataset(Dataset):
             return torch.zeros((1, CONFIG["TARGET_BINS"], num_frames), dtype=torch.float32)
     def load_with_retry(self, idx, retry_count):
         if retry_count > 5:
-            # 失敗 fallback: 回傳全零張量 (352 是 16 的倍數，安全)
+            # 失敗 fallback: 回傳 3 個張量
             return torch.zeros(CONFIG["CHUNK_SIZE"]), \
                 torch.zeros((2, CONFIG["TARGET_BINS"], 352)), \
-                torch.zeros((4, CONFIG["TARGET_BINS"], 352))
+                torch.zeros((2, CONFIG["CHUNK_SIZE"]))
 
         orig_path = self.data_list[idx]
         fname = os.path.basename(orig_path)
@@ -112,10 +112,6 @@ class AudioDataset(Dataset):
             mel_audio_path = orig_path.replace(CONFIG["DIR_MIX"], CONFIG["DIR_MELODY"]).replace(CONFIG["EXT_MIX"], CONFIG["EXT_MELODY"])
             acc_audio_path = orig_path.replace(CONFIG["DIR_MIX"], CONFIG["DIR_ACCOMP"]).replace(CONFIG["EXT_MIX"], CONFIG["EXT_ACCOMP"])
             
-            midi_fname = fname.replace(CONFIG["EXT_MIX"], CONFIG["EXT_MIDI"])
-            midi_path_mel = os.path.join(CONFIG["MIDI_ROOT"], CONFIG["MIDI_SUB_MEL"], midi_fname)
-            midi_path_acc = os.path.join(CONFIG["MIDI_ROOT"], CONFIG["MIDI_SUB_ACC"], midi_fname)
-
             self._validate_file(orig_path)
             total_duration = librosa.get_duration(path=orig_path)
             start_time = np.random.uniform(0, max(0, total_duration - CONFIG["DURATION"]))
@@ -127,39 +123,24 @@ class AudioDataset(Dataset):
             # 2. 準備目標答案
             wav_mel, _ = librosa.load(mel_audio_path, sr=CONFIG["SAMPLE_RATE"], offset=start_time, duration=CONFIG["DURATION"])
             wav_acc, _ = librosa.load(acc_audio_path, sr=CONFIG["SAMPLE_RATE"], offset=start_time, duration=CONFIG["DURATION"])
-            spec_mel = self.wav_to_spec(librosa.util.fix_length(wav_mel, size=CONFIG["CHUNK_SIZE"]))
-            spec_acc = self.wav_to_spec(librosa.util.fix_length(wav_acc, size=CONFIG["CHUNK_SIZE"]))
-            num_frames = spec_mel.shape[2]
             
-            # 3. 產生 MIDI 遮罩
-            mask_mel = self._generate_midi_mask(midi_path_mel, start_time, num_frames)
-            mask_acc = self._generate_midi_mask(midi_path_acc, start_time, num_frames)
+            # 確保擷取後的波形長度完美對齊
+            wav_mel = librosa.util.fix_length(wav_mel, size=CONFIG["CHUNK_SIZE"])
+            wav_acc = librosa.util.fix_length(wav_acc, size=CONFIG["CHUNK_SIZE"])
             
-            # 4. 產生獨立的輸入提示 (獨立 Dropout)
-            hint_mel = torch.zeros_like(mask_mel)
-            hint_acc = torch.zeros_like(mask_acc)
+            spec_mel = self.wav_to_spec(wav_mel)
+            spec_acc = self.wav_to_spec(wav_acc)
             
-            if self.split == "train":
-                if random.random() > CONFIG["PROB_DROP_MELODY_HINT"]:
-                    hint_mel = mask_mel
-                if random.random() > CONFIG["PROB_DROP_ACCOMP_HINT"]:
-                    hint_acc = mask_acc
-            else:
-                hint_mel, hint_acc = mask_mel, mask_acc
+            # 3. 組合答案: 僅保留 2 通道 [Audio_Mel, Audio_Acc]
+            target = torch.cat([spec_mel, spec_acc], dim=0)
             
-            # 合併為 2 通道提示: (2, F, T)
-            midi_hints = torch.cat([hint_mel, hint_acc], dim=0)
-            
-            # 5. 組合 4 通道答案: [Audio_Mel, Audio_Acc, MIDI_Mel, MIDI_Acc]
-            target = torch.cat([spec_mel, spec_acc, mask_mel, mask_acc], dim=0)
-            
-            # 6. 組合目標時域音訊供 SI-SDR 使用: [Melody_Wav, Accomp_Wav]
+            # 4. 組合目標時域音訊供 SI-SDR 使用: [Melody_Wav, Accomp_Wav]
             target_audios = torch.cat([
                 torch.from_numpy(wav_mel).unsqueeze(0),
                 torch.from_numpy(wav_acc).unsqueeze(0)
             ], dim=0)
             
-            return torch.from_numpy(wav_orig), midi_hints, target, target_audios
+            return torch.from_numpy(wav_orig), target, target_audios
 
         except Exception as e:
             self._log_error(f"{fname} | {str(e)}")

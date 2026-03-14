@@ -55,7 +55,7 @@ class AudioUNet(nn.Module):
 
         self.outc = nn.Conv2d(16, n_classes, kernel_size=1)
 
-    def forward(self, waveform, midi_hints=None, return_audio=False):
+    def forward(self, waveform, return_audio=False):
         # 1. GPU STFT 轉換
         stft = torch.stft(waveform, n_fft=self.n_fft, hop_length=self.hop_length, 
                           window=self.window, center=True, return_complex=True)
@@ -107,17 +107,18 @@ class AudioUNet(nn.Module):
         
         logits = self.outc(u4) 
         
-        # ✨ [旋律扣除模式]：預測旋律遮罩，扣除後得到伴奏
-        mel_mask = torch.sigmoid(logits)
-        acc_mask = 1.0 - mel_mask
+        # ✨ [伴奏扣除模式]：預測伴奏遮罩，扣除後得到旋律
+        # (邏輯與原先生成伴奏時對稱)
+        acc_mask = torch.sigmoid(logits)
+        mel_mask = 1.0 - acc_mask
         
-        # 伴奏頻譜 = 混合音譜 * 伴奏遮罩
-        mapped_spec = x[:, :1, :, :] * acc_mask
+        # 旋律頻譜 = 混合音譜 * 旋律遮罩
+        mapped_spec = x[:, :1, :, :] * mel_mask
         
         # 4. 還原 Padding
         if pad_t > 0:
             mapped_spec = mapped_spec[:, :, :, :T]
-            mel_mask = mel_mask[:, :, :, :T]
+            acc_mask = acc_mask[:, :, :, :T]
             
         # 5. SI-SDR 支援
         if return_audio:
@@ -125,7 +126,7 @@ class AudioUNet(nn.Module):
             if phase.shape[2] > mapped_spec.shape[2]:
                 phase = phase[:, :mapped_spec.shape[2], :mapped_spec.shape[3]]
                 
-            # 逆正規化
+            # 逆正規化 (針對旋律)
             log_mapped = (mapped_spec * 10.0) - 10.0
             mag_mapped = torch.exp(log_mapped)
             
@@ -136,8 +137,8 @@ class AudioUNet(nn.Module):
             pred_audio = torch.istft(recon_complex, n_fft=self.n_fft, hop_length=self.hop_length, 
                                      window=self.window, center=True, length=waveform.shape[-1])
             
-            # 計算被扣除的旋律頻譜，用於 Loss 計算
-            pred_mel_spec = x_norm * mel_mask
-            return mapped_spec, pred_audio.unsqueeze(1), pred_mel_spec
+            # 計算被扣除的伴奏頻譜，用於 Loss 計算
+            pred_acc_spec = x_norm[:, :, :, :T] * acc_mask
+            return mapped_spec, pred_audio.unsqueeze(1), pred_acc_spec
         
         return mapped_spec
