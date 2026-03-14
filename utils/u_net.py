@@ -55,7 +55,7 @@ class AudioUNet(nn.Module):
 
         self.outc = nn.Conv2d(16, n_classes, kernel_size=1)
 
-    def forward(self, waveform, midi_hints=None, return_audio=False):
+    def forward(self, waveform, return_audio=False):
         # 1. GPU STFT 轉換
         stft = torch.stft(waveform, n_fft=self.n_fft, hop_length=self.hop_length, 
                           window=self.window, center=True, return_complex=True)

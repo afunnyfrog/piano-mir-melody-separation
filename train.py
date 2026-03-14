@@ -18,7 +18,7 @@ from utils.loss import AudioSeparationLoss
 # ==========================================
 # 1. 資料與儲存設定
 CSV_FILE = "classical_dataset.csv" 
-CHECKPOINT_DIR = "./checkpoints_multi_task"
+CHECKPOINT_DIR = "./checkpoints_acc_task"
 RESUME_BEST = False  # 是否繼承目前最佳權重
 RESUME_FROM = os.path.join(CHECKPOINT_DIR, "best_model.pth")
 
@@ -159,7 +159,7 @@ def main():
         model.train()
         train_loss_accum = 0
 
-        for batch_idx, (waveforms, midi_hints, targets, target_audios) in enumerate(train_loader):
+        for batch_idx, (waveforms, targets, target_audios) in enumerate(train_loader):
             waveforms = waveforms.to(device)
             targets = targets.to(device)
             target_audios = target_audios.to(device)
@@ -199,7 +199,7 @@ def main():
         model.eval()
         val_loss_accum = 0
         with torch.no_grad():
-            for waveforms, midi_hints, targets, target_audios in val_loader:
+            for waveforms, targets, target_audios in val_loader:
                 waveforms = waveforms.to(device)
                 targets = targets.to(device)
                 target_audios = target_audios.to(device)
