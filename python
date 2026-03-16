@@ -1,0 +1,10 @@
+--- 啟動分析 ---
+模式: melody
+取樣率: 44100
+正在分析 Song1...
+
+--- 評估結果摘要 ---
+              SDR     SI-SDR  SIR        SAR
+Part                                        
+Melody  11.006673  10.274794  inf  11.006673
+報告已儲存至: melody_separation_report.csv
