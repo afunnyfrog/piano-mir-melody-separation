@@ -13,7 +13,7 @@ N_FFT = 2048
 HOP_LENGTH = 512
 WIN_LENGTH = 2048
 MODEL_PATH = "./checkpoints_dynamic_8s/best_model.pth"
-INPUT_AUDIO = r"C:\Users\cebit\Desktop\專題生成\classified_dataset\mix_audio_flac\Classical_Classical Era_Muzio Clementi_Sonatina-1-2_mixed.flac"
+INPUT_AUDIO = r"C:\Users\cebit\Desktop\專題生成\classified_dataset\balanced\mix_audio_flac\Classical_Classical_Joseph Haydn_Gypsy Rondo_mixed.flac"
 OUTPUT_DIR = "./results"
 SAMPLE_RATE = 44100
 

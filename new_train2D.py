@@ -15,15 +15,14 @@ from utils.loss import AudioSeparationLoss
 DATA_DIR = r"C:\Users\cebit\Desktop\專題生成\classified_dataset"
 CHECKPOINT_DIR = "./checkpoints_dynamic_8s"
 BATCH_SIZE = 16
-LEARNING_RATE = 2e-4
+LEARNING_RATE = 1e-4
 SEGMENT_SECONDS = 2.0
-SAMPLES_PER_EPOCH = 600
+SAMPLES_PER_EPOCH = 200
 N_FFT = 2048
 HOP_LENGTH = 512
 WIN_LENGTH = 2048
 RESUME_FROM = os.path.join(CHECKPOINT_DIR, "best_model.pth")
-RUN_EPOCHS = 50
-
+RUN_EPOCHS = 150
 
 
 def main():
@@ -42,10 +41,10 @@ def main():
 
     # 2. 初始化 Loss (確保參數名與你最新的 loss.py 一致)
     criterion = AudioSeparationLoss(
-        alpha_leakage=2.0,
-        alpha_wav=12.0,
-        alpha_attack=6.0,
-        melody_weight=10.0
+        alpha_leakage=10.0,
+        alpha_wav=100.0,
+        alpha_attack=80.0,
+        melody_weight=40.0
     ).to(device)
 
     optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE)
