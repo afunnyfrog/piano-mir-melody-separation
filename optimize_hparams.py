@@ -45,17 +45,17 @@ def main():
     # 5. 定義調優範圍
     if args.task == 'melody':
         hyper_parameters = [
-            UniformParameterRange('General/learning_rate', min_value=1e-5, max_value=5e-4),
-            DiscreteParameterRange('General/batch_size', values=[4, 8, 16]),
-            UniformParameterRange('General/melody_weight', min_value=1.0, max_value=15.0),
-            UniformParameterRange('General/alpha_sisdr', min_value=1.0, max_value=10.0),
+            UniformParameterRange('Args/learning_rate', min_value=5e-6, max_value=8e-4),
+            DiscreteParameterRange('Args/batch_size', values=[4, 8,12, 16,20]),
+            UniformParameterRange('Args/melody_weight', min_value=0.5, max_value=15.0),
+            UniformParameterRange('Args/alpha_sisdr', min_value=0.5, max_value=13.0),
         ]
     else:
         hyper_parameters = [
-            UniformParameterRange('General/learning_rate', min_value=1e-5, max_value=5e-4),
-            DiscreteParameterRange('General/batch_size', values=[4, 8, 16]),
-            UniformParameterRange('General/accomp_weight', min_value=1.0, max_value=15.0),
-            UniformParameterRange('General/alpha_l1', min_value=1.0, max_value=10.0),
+            UniformParameterRange('Args/learning_rate', min_value=5e-6, max_value=8e-4),
+            DiscreteParameterRange('Args/batch_size', values=[4, 8,12, 16,20]),
+            UniformParameterRange('Args/accomp_weight', min_value=0.5, max_value=15.0),
+            UniformParameterRange('Args/alpha_l1', min_value=0.5, max_value=13.0),
         ]
 
     # 6. 設定優化器
