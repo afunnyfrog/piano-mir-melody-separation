@@ -30,32 +30,40 @@ def main():
     )
 
     # 4. 找到對應的基底任務 ID
-    target_task = Task.get_task(
+    # 增加篩選條件：只抓取已完成或正在執行的，避免抓到空的失敗任務
+    target_tasks = Task.get_tasks(
         project_name='piano-mir-melody-separation',
-        task_name=target_name
+        task_name=target_name,
+        task_filter={'status': ['completed', 'published', 'stopped', 'in_progress']}
     )
 
-    if not target_task:
-        print(f"❌ 找不到基底任務: {target_name}")
+    if not target_tasks:
+        print(f"❌ 找不到任何有效的基底任務: {target_name}。請先手動執行一次 {target_name} 並確保它成功回報指標。")
         return
 
+    # 抓取最新的那一個
+    target_task = target_tasks[-1]
     base_task_id = target_task.id
-    print(f"✅ 找到基底任務 ID: {base_task_id} (任務: {target_name})")
+    print(f"✅ 找到基底任務 ID: {base_task_id} (名稱: {target_name}, 狀態: {target_task.status})")
+
+    # 檢查參數是否存在於該任務 (Debug 用)
+    params = target_task.get_parameters_names()
+    print(f"🔍 該任務偵測到的參數路徑範例: {params[:5] if params else '無'}")
 
     # 5. 定義調優範圍
     if args.task == 'melody':
         hyper_parameters = [
-            UniformParameterRange('Args/learning_rate', min_value=5e-6, max_value=8e-4),
-            DiscreteParameterRange('Args/batch_size', values=[4, 8,12, 16,20]),
-            UniformParameterRange('Args/melody_weight', min_value=0.5, max_value=15.0),
-            UniformParameterRange('Args/alpha_sisdr', min_value=0.5, max_value=13.0),
+            UniformParameterRange('General/learning_rate', min_value=5e-6, max_value=8e-4),
+            DiscreteParameterRange('General/batch_size', values=[4, 8, 12, 16, 20]),
+            UniformParameterRange('General/melody_weight', min_value=0.5, max_value=15.0),
+            UniformParameterRange('General/alpha_sisdr', min_value=0.5, max_value=13.0),
         ]
     else:
         hyper_parameters = [
-            UniformParameterRange('Args/learning_rate', min_value=5e-6, max_value=8e-4),
-            DiscreteParameterRange('Args/batch_size', values=[4, 8,12, 16,20]),
-            UniformParameterRange('Args/accomp_weight', min_value=0.5, max_value=15.0),
-            UniformParameterRange('Args/alpha_l1', min_value=0.5, max_value=13.0),
+            UniformParameterRange('General/learning_rate', min_value=5e-6, max_value=8e-4),
+            DiscreteParameterRange('General/batch_size', values=[4, 8, 12, 16, 20]),
+            UniformParameterRange('General/accomp_weight', min_value=0.5, max_value=15.0),
+            UniformParameterRange('General/alpha_l1', min_value=0.5, max_value=13.0),
         ]
 
     # 6. 設定優化器
