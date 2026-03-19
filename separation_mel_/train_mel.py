@@ -7,51 +7,61 @@ import time
 import matplotlib
 matplotlib.use('Agg') # 設為非互動式後端，防止多執行緒 GUI 錯誤
 import matplotlib.pyplot as plt
+from dataclasses import dataclass, asdict
+from clearml import Task 
 
 # 引入自定義模組
 from tools.turn_STFT_dataset import AudioDataset
 from utils_melody.u_net import AudioUNet
 from utils_melody.loss import AudioSeparationLoss
 
-# ==========================================
-#               參數設定
-# ==========================================
-# 1. 資料與儲存設定
-CSV_FILE = "classical_dataset.csv" 
-CHECKPOINT_DIR = "./checkpoints_mel_task"
-RESUME_BEST = False  # 是否繼承目前最佳權重
-RESUME_FROM = os.path.join(CHECKPOINT_DIR, "best_model.pth")
+@dataclass
+class TrainConfig:
+    # 1. 資料與儲存設定
+    csv_file: str = "classical_dataset.csv" 
+    checkpoint_dir: str = "./checkpoints_mel_task"
+    resume_best: bool = False  # 是否繼承目前最佳權重
+    resume_from: str = "./checkpoints_mel_task/best_model.pth"
 
-# 2. 訓練超參數
-BATCH_SIZE = 8
-LEARNING_RATE = 5e-5
-WEIGHT_DECAY = 1e-4
-RUN_EPOCHS = 80
-WARMUP_EPOCHS = 10      # 預熱 Epoch 數 
-T_0 = 10               # 每個週期的 Epoch 數 (固定，因為 T_MULT=1)
-T_MULT = 1             # 設定為 1，代表週期長度固定不變
-ETA_MIN = 1e-6       # 學習率排程器的最小學習率
+    # 2. 訓練超參數
+    batch_size: int = 8
+    learning_rate: float = 5e-5
+    weight_decay: float = 1e-4
+    run_epochs: int = 80
+    warmup_epochs: int = 10      # 預熱 Epoch 數 
+    t_0: int = 10               # 每個週期的 Epoch 數 (固定，因為 T_MULT=1)
+    t_mult: int = 1             # 設定為 1，代表週期長度固定不變
+    eta_min: float = 1e-6       # 學習率排程器的最小學習率
 
-# 3. 模型設定 (必須與訓練/推論一致)
-N_CHANNELS = 1       # 輸入通道: 1 代表僅讀取原始音訊頻譜
-N_CLASSES = 1        # 輸出通道: 1 代表模型輸出旋律遮罩
+    # 3. 模型設定 (必須與訓練/推論一致)
+    n_channels: int = 1       # 輸入通道: 1 代表僅讀取原始音訊頻譜
+    n_classes: int = 1        # 輸出通道: 1 代表模型輸出旋律遮罩
 
-# 4. 損失函數權重 (AudioSeparationLoss)
-ALPHA_L1 = 3.0
-ALPHA_SPECTRAL = 2.0
-ALPHA_SISDR = 5.0 
-ALPHA_SIMILARITY = 5.0 # 伴奏/旋律互斥相似度權重 (處罰旋律中的伴奏殘留)
-MELODY_WEIGHT = 7.5    # 旋律擬合權重 (現在是主要目標)
-ACCOMP_WEIGHT = 1.0    # 被扣除伴奏部分的參考權重
+    # 4. 損失函數權重 (AudioSeparationLoss)
+    alpha_l1: float = 3.0
+    alpha_spectral: float = 2.0
+    alpha_sisdr: float = 5.0 
+    alpha_similarity: float = 5.0 # 伴奏/旋律互斥相似度權重 (處罰旋律中的伴奏殘留)
+    melody_weight: float = 7.5    # 旋律擬合權重 (現在是主要目標)
+    accomp_weight: float = 1.0    # 被扣除伴奏部分的參考權重
 
-# 5. 其他設定
-PRINT_FREQ = 20      # 每 20 個 batch 輸出一次進度
-NUM_WORKERS = 4      # DataLoader 的並行執行數
-PIN_MEMORY = True    # 加速 GPU 記憶體傳輸
-DROP_LAST = True     # 捨棄最後一個不完整的 batch
-# ==========================================
+    # 5. 其他設定
+    print_freq: int = 20      # 每 20 個 batch 輸出一次進度
+    num_workers: int = 4      # DataLoader 的並行執行數
+    pin_memory: bool = True    # 加速 GPU 記憶體傳輸
+    drop_last: bool = True     # 捨棄最後一個不完整的 batch
+
 
 def main():
+    # 初始化 ClearML Task
+    task = Task.init(project_name='piano-mir-melody-separation', task_name='Melody-Separation-Training')
+    
+    # 建立配置物件
+    cfg = TrainConfig()
+    
+    # 連結 ClearML，這會讓參數出現在 Web UI 並允許遠端修改
+    task.connect(cfg)
+
     # 解決某些環境下無法建立 torch kernel 快取目錄的問題
     os.environ['PYTORCH_KERNEL_CACHE_PATH'] = os.path.join(os.getcwd(), '.torch_kernel_cache')
     if not os.path.exists(os.environ['PYTORCH_KERNEL_CACHE_PATH']):
@@ -60,65 +70,65 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"使用裝置: {device}")
 
-    if not os.path.exists(CHECKPOINT_DIR):
-        os.makedirs(CHECKPOINT_DIR)
+    if not os.path.exists(cfg.checkpoint_dir):
+        os.makedirs(cfg.checkpoint_dir)
 
     # ===========================
     #    Dataset 與 DataLoader
     # ===========================
     print("正在初始化魯棒多任務資料集...")
 
-    train_dataset = AudioDataset(csv_file=CSV_FILE, split="train")
-    val_dataset = AudioDataset(csv_file=CSV_FILE, split="val")
+    train_dataset = AudioDataset(csv_file=cfg.csv_file, split="train")
+    val_dataset = AudioDataset(csv_file=cfg.csv_file, split="val")
 
     train_loader = DataLoader(
         train_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=cfg.batch_size,
         shuffle=True,
-        num_workers=NUM_WORKERS,
-        pin_memory=PIN_MEMORY,
-        drop_last=DROP_LAST
+        num_workers=cfg.num_workers,
+        pin_memory=cfg.pin_memory,
+        drop_last=cfg.drop_last
     )
 
     val_loader = DataLoader(
         val_dataset,
-        batch_size=BATCH_SIZE,
+        batch_size=cfg.batch_size,
         shuffle=False,
-        num_workers=NUM_WORKERS,
-        pin_memory=PIN_MEMORY,
-        drop_last=DROP_LAST
+        num_workers=cfg.num_workers,
+        pin_memory=cfg.pin_memory,
+        drop_last=cfg.drop_last
     )
 
     # ===========================
     #        模型建置
     # ===========================
-    model = AudioUNet(n_channels=N_CHANNELS, n_classes=N_CLASSES).to(device)
+    model = AudioUNet(n_channels=cfg.n_channels, n_classes=cfg.n_classes).to(device)
 
     # 設定損失函數
     criterion = AudioSeparationLoss(
-        alpha_l1=ALPHA_L1,
-        alpha_spectral=ALPHA_SPECTRAL,
-        alpha_sisdr=ALPHA_SISDR,
-        alpha_similarity=ALPHA_SIMILARITY,
-        melody_weight=MELODY_WEIGHT,
-        accomp_weight=ACCOMP_WEIGHT
+        alpha_l1=cfg.alpha_l1,
+        alpha_spectral=cfg.alpha_spectral,
+        alpha_sisdr=cfg.alpha_sisdr,
+        alpha_similarity=cfg.alpha_similarity,
+        melody_weight=cfg.melody_weight,
+        accomp_weight=cfg.accomp_weight
     ).to(device)
 
-    optimizer = optim.AdamW(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
+    optimizer = optim.AdamW(model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
     
     # 整合預熱機制
     warmup_scheduler = optim.lr_scheduler.LinearLR(
-        optimizer, start_factor=0.1, end_factor=1.0, total_iters=WARMUP_EPOCHS
+        optimizer, start_factor=0.1, end_factor=1.0, total_iters=cfg.warmup_epochs
     )
     
     main_scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
-        optimizer, T_0=T_0, T_mult=T_MULT, eta_min=ETA_MIN
+        optimizer, T_0=cfg.t_0, T_mult=cfg.t_mult, eta_min=cfg.eta_min
     )
     
     scheduler = optim.lr_scheduler.SequentialLR(
         optimizer, 
         schedulers=[warmup_scheduler, main_scheduler], 
-        milestones=[WARMUP_EPOCHS]
+        milestones=[cfg.warmup_epochs]
     )
 
     # ===========================
@@ -128,10 +138,10 @@ def main():
     best_val_loss = float('inf')
     train_history, val_history = [], []
 
-    if RESUME_BEST and RESUME_FROM and os.path.exists(RESUME_FROM):
-        print(f"🔄 發現存檔，正在載入: {RESUME_FROM}")
+    if cfg.resume_best and cfg.resume_from and os.path.exists(cfg.resume_from):
+        print(f"🔄 發現存檔，正在載入: {cfg.resume_from}")
         try:
-            checkpoint = torch.load(RESUME_FROM, map_location=device, weights_only=False)
+            checkpoint = torch.load(cfg.resume_from, map_location=device, weights_only=False)
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             if 'scheduler_state_dict' in checkpoint:
@@ -143,10 +153,10 @@ def main():
             print(f"✅ 載入成功！目前進度: 第 {start_epoch} 輪")
         except Exception as e:
             print(f"❌ 載入存檔失敗: {e}，將從頭開始。")
-    elif not RESUME_BEST:
+    elif not cfg.resume_best:
         print("⏭️ 已設定不繼承權重，將從頭開始訓練。")
 
-    end_epoch = start_epoch + RUN_EPOCHS
+    end_epoch = start_epoch + cfg.run_epochs
     print("-" * 40)
 
     # ===========================
@@ -184,12 +194,12 @@ def main():
 
             loss.backward()
 
-            torch.nn.utils_melody.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
             
             train_loss_accum += loss.item()
             
-            if batch_idx % PRINT_FREQ == 0:
+            if batch_idx % cfg.print_freq == 0:
                 print(f"Epoch [{epoch+1}/{end_epoch}] Batch [{batch_idx}/{len(train_loader)}] | Loss: {loss.item():.4f}")
 
         avg_train_loss = train_loss_accum / len(train_loader)
@@ -220,6 +230,10 @@ def main():
         avg_val_loss = val_loss_accum / len(val_loader)
         val_history.append(avg_val_loss)
 
+        # --- Report Metrics to ClearML ---
+        task.get_logger().report_scalar(title="Loss", series="Train", value=avg_train_loss, iteration=epoch + 1)
+        task.get_logger().report_scalar(title="Loss", series="Val", value=avg_val_loss, iteration=epoch + 1)
+
         current_lr = optimizer.param_groups[0]['lr']
         scheduler.step()
 
@@ -241,7 +255,7 @@ def main():
                 'best_val_loss': best_val_loss,
                 'train_history': train_history,
                 'val_history': val_history
-            }, os.path.join(CHECKPOINT_DIR, "best_model.pth"))
+            }, os.path.join(cfg.checkpoint_dir, "best_model.pth"))
             print("🏆 Best Model Saved!")
 
         if (epoch + 1) % 10 == 0:
@@ -251,7 +265,7 @@ def main():
                 'optimizer_state_dict': optimizer.state_dict(),
                 'train_history': train_history,
                 'val_history': val_history
-            }, os.path.join(CHECKPOINT_DIR, f"model_epoch_{epoch + 1}.pth"))
+            }, os.path.join(cfg.checkpoint_dir, f"model_epoch_{epoch + 1}.pth"))
 
     print("="*60)
     print(f"🎉 任務完成！目前總進度: {end_epoch} 輪。")
