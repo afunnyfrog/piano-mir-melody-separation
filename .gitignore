@@ -235,6 +235,7 @@ melenv/
 
 #環境檔
 melenv/
+`venv`/
 
 #輸出練習檔
 /wav_output/
