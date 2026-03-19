@@ -1,3 +1,4 @@
+--find-links https://download.pytorch.org/whl/cu121
 absl-py==2.3.1
 alembic==1.18.4
 asttokens==2.4.1
