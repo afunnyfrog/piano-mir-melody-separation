@@ -76,7 +76,7 @@ def create_dataset_manifest(
 # --- 主程式 ---
 if __name__ == "__main__":
     # 使用 Raw String (r"...") 避免路徑錯誤
-    MY_DATA_DIR = r"C:\project_data\two_line_midi\flac_output" 
+    MY_DATA_DIR = r"C:\Users\cebit\Desktop\專題生成\flac_output"
     
     create_dataset_manifest(
         data_dir=MY_DATA_DIR,
