@@ -19,8 +19,8 @@ def main():
         execution_queue='default',       # 明確指定隊列
         parameter_override={
             'Args/task': 'accomp',
-            'Args/jobs': 5,
-            'Args/epochs': 5
+            'Args/jobs': 30,
+            'Args/epochs': 20
         }
     )
 
@@ -32,8 +32,8 @@ def main():
         execution_queue='default',       # 明確指定隊列
         parameter_override={
             'Args/task': 'melody',
-            'Args/jobs': 5,
-            'Args/epochs': 5
+            'Args/jobs': 30,
+            'Args/epochs': 20
         }
     )
 
