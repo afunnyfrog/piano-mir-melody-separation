@@ -2,87 +2,143 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-class AudioUNet(nn.Module):
-    def __init__(self, n_channels=1, n_classes=2):
-        super(AudioUNet, self).__init__()
-
-        # --- Encoder (下採樣) ---
-        # 輸入現在是 [Batch, 1, 1025, Time]
-        self.enc1 = nn.Sequential(
-            nn.Conv2d(n_channels, 16, kernel_size=3, stride=1, padding=1),
-            nn.LeakyReLU(0.2)
-        )
-        self.enc2 = nn.Sequential(
-            nn.Conv2d(16, 32, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(32),
-            nn.LeakyReLU(0.2)
-        )
-        self.enc3 = nn.Sequential(
-            nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(0.2)
-        )
-        self.enc4 = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(128),
-            nn.LeakyReLU(0.2)
-        )
-        self.enc5 = nn.Sequential(
-            nn.Conv2d(128, 256, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(256),
-            nn.LeakyReLU(0.2)
-        )
-
-        # --- Bottleneck ---
-        self.bottleneck = nn.Sequential(
-            nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(512),
-            nn.LeakyReLU(0.2),
-            nn.Conv2d(512, 256, kernel_size=3, stride=1, padding=1),
-            nn.BatchNorm2d(256),
-            nn.LeakyReLU(0.2)
-        )
-
-        # --- Decoder (上採樣) ---
-        self.dec5 = self._make_dec_layer(256 + 256, 128)
-        self.dec4 = self._make_dec_layer(128 + 128, 64)
-        self.dec3 = self._make_dec_layer(64 + 64, 32)
-        self.dec2 = self._make_dec_layer(32 + 32, 16)
-
-        self.final = nn.Conv2d(16 + 16, n_classes, kernel_size=1)
-        self.relu = nn.ReLU() # 頻譜能量為正數，不再使用 Tanh
-
-    def _make_dec_layer(self, in_channels, out_channels):
-        return nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1),
+class DoubleConv(nn.Module):
+    """(convolution => [BN] => ReLU) * 2"""
+    def __init__(self, in_channels, out_channels, dropout_rate=0.0):
+        super().__init__()
+        layers = [
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU()
-        )
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True)
+        ]
+        
+        if dropout_rate > 0:
+            layers.append(nn.Dropout(dropout_rate))
+            
+        self.double_conv = nn.Sequential(*layers)
 
     def forward(self, x):
-        # x shape: [Batch, 1, Freq, Time]
-        e1 = self.enc1(x)
-        e2 = self.enc2(e1)
-        e3 = self.enc3(e2)
-        e4 = self.enc4(e3)
-        e5 = self.enc5(e4)
-        b = self.bottleneck(e5)
+        return self.double_conv(x)
 
-        # Decoder + Skip Connections
-        # 使用 bilinear 插值對齊 2D 尺寸
-        d5 = F.interpolate(b, size=(e5.shape[2], e5.shape[3]), mode='bilinear', align_corners=False)
-        d5 = self.dec5(torch.cat([d5, e5], dim=1))
+class AudioUNet(nn.Module):
+    def __init__(self, n_channels=1, n_classes=1, n_fft=2048, hop_length=512):
+        super(AudioUNet, self).__init__()
+        self.n_channels = n_channels
+        self.n_classes = n_classes
+        self.n_fft = n_fft
+        self.hop_length = hop_length
 
-        d4 = F.interpolate(d5, size=(e4.shape[2], e4.shape[3]), mode='bilinear', align_corners=False)
-        d4 = self.dec4(torch.cat([d4, e4], dim=1))
+        self.register_buffer('window', torch.hann_window(n_fft))
 
-        d3 = F.interpolate(d4, size=(e3.shape[2], e3.shape[3]), mode='bilinear', align_corners=False)
-        d3 = self.dec3(torch.cat([d3, e3], dim=1))
+        # --- Encoder (Downscaling) ---
+        self.inc = DoubleConv(n_channels, 16)
+        self.down1 = DoubleConv(16, 32)
+        self.down2 = DoubleConv(32, 64)
+        self.down3 = DoubleConv(64, 128, dropout_rate=0.5)
+        self.pool = nn.MaxPool2d(2)
 
-        d2 = F.interpolate(d3, size=(e2.shape[2], e2.shape[3]), mode='bilinear', align_corners=False)
-        d2 = self.dec2(torch.cat([d2, e2], dim=1))
+        # --- Bottleneck ---
+        self.bot = DoubleConv(128, 256, dropout_rate=0.5)
 
-        d1 = F.interpolate(d2, size=(e1.shape[2], e1.shape[3]), mode='bilinear', align_corners=False)
-        out = self.final(torch.cat([d1, e1], dim=1))
+        # --- Decoder (Upscaling) ---
+        self.up1 = nn.ConvTranspose2d(256, 128, kernel_size=2, stride=2)
+        self.conv1 = DoubleConv(256, 128)
+        self.up2 = nn.ConvTranspose2d(128, 64, kernel_size=2, stride=2)
+        self.conv2 = DoubleConv(128, 64)
+        self.up3 = nn.ConvTranspose2d(64, 32, kernel_size=2, stride=2)
+        self.conv3 = DoubleConv(64, 32)
+        self.up4 = nn.ConvTranspose2d(32, 16, kernel_size=2, stride=2)
+        self.conv4 = DoubleConv(32, 16)
 
-        return self.relu(out)
+        self.outc = nn.Conv2d(16, n_classes, kernel_size=1)
+
+    def forward(self, waveform, return_audio=False):
+        # 1. GPU STFT 轉換
+        stft = torch.stft(waveform, n_fft=self.n_fft, hop_length=self.hop_length, 
+                          window=self.window, center=True, return_complex=True)
+        magnitude = torch.abs(stft)
+        log_spec = torch.log(magnitude + 1e-6)
+        
+        # 2. 裁切與維度對齊 (1024 bins)
+        x_raw = log_spec[:, :1024, :].unsqueeze(1) # (B, 1, 1024, T)
+        
+        # 對輸入進行正規化
+        x_norm = (x_raw + 10.0) / 10.0
+        x = x_norm
+        
+        # 3. 自動對齊 16 的倍數
+        B, C, H, T = x.shape
+        pad_t = (16 - (T % 16)) % 16
+        if pad_t > 0:
+            x = F.pad(x, (0, pad_t)) # 僅在右側補齊時間幀
+
+        # --- Encoder ---
+        x1 = self.inc(x)            
+        p1 = self.pool(x1)          
+        x2 = self.down1(p1)         
+        p2 = self.pool(x2)          
+        x3 = self.down2(p2)         
+        p3 = self.pool(x3)          
+        x4 = self.down3(p3)         
+        p4 = self.pool(x4)          
+        
+        # --- Bottleneck ---
+        x5 = self.bot(p4)           
+        
+        # --- Decoder ---
+        u1 = self.up1(x5)           
+        u1 = torch.cat([u1, x4], dim=1) 
+        u1 = self.conv1(u1)
+
+        u2 = self.up2(u1)
+        u2 = torch.cat([u2, x3], dim=1)
+        u2 = self.conv2(u2)
+
+        u3 = self.up3(u2)
+        u3 = torch.cat([u3, x2], dim=1)
+        u3 = self.conv3(u3)
+
+        u4 = self.up4(u3)
+        u4 = torch.cat([u4, x1], dim=1)
+        u4 = self.conv4(u4)
+        
+        logits = self.outc(u4) 
+        
+        # ✨ [伴奏扣除模式]：預測伴奏遮罩，扣除後得到旋律
+        # (邏輯與原先生成伴奏時對稱)
+        acc_mask = torch.sigmoid(logits)
+        mel_mask = 1.0 - acc_mask
+        
+        # 旋律頻譜 = 混合音譜 * 旋律遮罩
+        mapped_spec = x[:, :1, :, :] * mel_mask
+        
+        # 4. 還原 Padding
+        if pad_t > 0:
+            mapped_spec = mapped_spec[:, :, :, :T]
+            acc_mask = acc_mask[:, :, :, :T]
+            
+        # 5. SI-SDR 支援
+        if return_audio:
+            phase = torch.angle(stft)
+            if phase.shape[2] > mapped_spec.shape[2]:
+                phase = phase[:, :mapped_spec.shape[2], :mapped_spec.shape[3]]
+                
+            # 逆正規化 (針對旋律)
+            log_mapped = (mapped_spec * 10.0) - 10.0
+            mag_mapped = torch.exp(log_mapped)
+            
+            # 補齊 bin
+            mapped_1025 = F.pad(mag_mapped.squeeze(1), (0, 0, 0, 1))
+            recon_complex = torch.polar(mapped_1025, phase)
+            
+            pred_audio = torch.istft(recon_complex, n_fft=self.n_fft, hop_length=self.hop_length, 
+                                     window=self.window, center=True, length=waveform.shape[-1])
+            
+            # 計算被扣除的伴奏頻譜，用於 Loss 計算
+            pred_acc_spec = x_norm[:, :, :, :T] * acc_mask
+            return mapped_spec, pred_audio.unsqueeze(1), pred_acc_spec
+        
+        return mapped_spec
