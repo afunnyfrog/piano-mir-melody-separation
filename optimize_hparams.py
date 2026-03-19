@@ -47,7 +47,7 @@ def main():
     print(f"✅ 找到基底任務 ID: {base_task_id} (名稱: {target_name}, 狀態: {target_task.status})")
 
     # 檢查參數是否存在於該任務 (Debug 用)
-    params = target_task.get_parameters_names()
+    params = list(target_task.get_parameters().keys())
     print(f"🔍 該任務偵測到的參數路徑範例: {params[:5] if params else '無'}")
 
     # 5. 定義調優範圍
