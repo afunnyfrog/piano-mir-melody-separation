@@ -39,7 +39,7 @@ def main():
 
     # 4. 啟動 Pipeline
     # 這會讓整個流程自動化：先調優伴奏 -> 再調優旋律
-    pipe.start_local()
+    pipe.start_locally()
     
     print(f"🚀 流水線已在專案 '{PROJECT_NAME}' 中啟動！")
     
