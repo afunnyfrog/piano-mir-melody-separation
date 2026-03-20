@@ -241,3 +241,5 @@ melenv/
 /wav_output/
 
 .torch_kernel_cache/
+
+*.lock
