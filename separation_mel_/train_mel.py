@@ -139,7 +139,7 @@ def main():
     train_history, val_history = [], []
 
     if cfg.resume_best and cfg.resume_from and os.path.exists(cfg.resume_from):
-        print(f"🔄 發現存檔，正在載入: {cfg.resume_from}")
+        print(f"[UPDATE] 發現存檔，正在載入: {cfg.resume_from}")
         try:
             checkpoint = torch.load(cfg.resume_from, map_location=device, weights_only=False)
             model.load_state_dict(checkpoint['model_state_dict'])
@@ -150,11 +150,11 @@ def main():
             best_val_loss = checkpoint['best_val_loss']
             train_history = checkpoint.get('train_history', [])
             val_history = checkpoint.get('val_history', [])
-            print(f"✅ 載入成功！目前進度: 第 {start_epoch} 輪")
+            print(f"[SUCCESS] 載入成功！目前進度: 第 {start_epoch} 輪")
         except Exception as e:
-            print(f"❌ 載入存檔失敗: {e}，將從頭開始。")
+            print(f"[ERROR] 載入存檔失敗: {e}，將從頭開始。")
     elif not cfg.resume_best:
-        print("⏭️ 已設定不繼承權重，將從頭開始訓練。")
+        print("[SKIP] 已設定不繼承權重，將從頭開始訓練。")
 
     end_epoch = start_epoch + cfg.run_epochs
     print("-" * 40)
@@ -188,7 +188,7 @@ def main():
             loss, _ = criterion(predictions, targets, pred_audio=pred_audios, target_audio=target_audios, pred_other=pred_others)
             
             if torch.isnan(loss):
-                print(f"⚠️ 警告: 第 {epoch+1} 輪 Batch {batch_idx} 偵測到 NaN Loss，正在跳過...")
+                print(f"[WARN] 警告: 第 {epoch+1} 輪 Batch {batch_idx} 偵測到 NaN Loss，正在跳過...")
                 optimizer.zero_grad()
                 continue
 
@@ -268,7 +268,7 @@ def main():
             }, os.path.join(cfg.checkpoint_dir, f"model_epoch_{epoch + 1}.pth"))
 
     print("="*60)
-    print(f"🎉 任務完成！目前總進度: {end_epoch} 輪。")
+    print(f"[DONE] 任務完成！目前總進度: {end_epoch} 輪。")
 
 if __name__ == "__main__":
     main()

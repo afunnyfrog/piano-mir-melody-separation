@@ -53,7 +53,7 @@ class AudioDataset(Dataset):
         if len(self.data_list) == 0:
             print(f"警告：在 {csv_file} 中找不到任何 {split} 的資料！")
         else:
-            print(f"✅ 成功載入 [{split}] 資料集 (獨立通道多任務模式)")
+            print(f"SUCCESS load  [{split}] dataset")
 
     def __len__(self):
         return len(self.data_list)

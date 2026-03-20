@@ -45,16 +45,16 @@ class AudioDataset(Dataset):
                     
                     # 每 100 首輸出一次進度
                     if good_count % 100 == 0:
-                        print(f"✅ 已驗證 {good_count} 首正常檔案 (總進度: {i}/{len(all_filenames)})")
+                        print(f"[SUCCESS] 已驗證 {good_count} 首正常檔案 (總進度: {i}/{len(all_filenames)})")
                 else:
                     bad_files.append((fname, error_msg))
                     # 有壞檔立即輸出
-                    print(f"❌ 壞檔 [{len(bad_files)}]: {fname}")
+                    print(f"[ERROR] 壞檔 [{len(bad_files)}]: {fname}")
                     print(f"   原因: {error_msg}")
             
             # 最終統計
             print(f"\n{'='*80}")
-            print(f"✅ 驗證完成: {len(self.filenames)} 正常, {len(bad_files)} 損壞")
+            print(f"[SUCCESS] 驗證完成: {len(self.filenames)} 正常, {len(bad_files)} 損壞")
             print(f"{'='*80}")
             
             # 記錄壞檔案
@@ -63,10 +63,10 @@ class AudioDataset(Dataset):
                     f.write(f"總共 {len(bad_files)} 個損壞檔案:\n\n")
                     for bf, err in bad_files:
                         f.write(f"{bf}\n  原因: {err}\n\n")
-                print(f"📝 壞檔案清單已儲存至 bad_files_list.txt\n")
+                print(f"[SAVE] 壞檔案清單已儲存至 bad_files_list.txt\n")
         else:
             self.filenames = all_filenames
-            print("⚠️ 跳過驗證步驟")
+            print("[WARN] 跳過驗證步驟")
 
     def _get_corresponding_filenames(self, mix_fname):
         """根據 mix 檔名生成對應的 melody 和 accomp 檔名"""
@@ -167,7 +167,7 @@ class AudioDataset(Dataset):
             return spec_orig, target
 
         except Exception as e:
-            print(f"\n❌ 載入失敗: {fname} - {str(e)}")
+            print(f"\n[ERROR] 載入失敗: {fname} - {str(e)}")
             # 返回零張量避免訓練中斷
             return torch.zeros(SPEC_SHAPE), torch.zeros((2, 1024, 256))
 

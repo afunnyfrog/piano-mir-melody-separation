@@ -166,7 +166,7 @@ def plot_results(df, save_path="evaluation_chart_mel.png", mode_name="both"):
     plt.grid(axis='y', linestyle='--', alpha=0.7)
 
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"\n📈 圖表已儲存至: {save_path}")
+    print(f"\n[INFO] 圖表已儲存至: {save_path}")
 
 if __name__ == "__main__":
     main()
