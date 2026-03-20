@@ -17,7 +17,7 @@ SAVE_CHART = "evaluation_chart_accomp.png"
 REPORT_PATH = "separation_reportaccomp.csv"
 SAMPLE_RATE = 44100
 
-# ✨ 手動設定要顯示在圖表上的指標 (可選: "SDR", "SI-SDR", "SIR", "SAR")
+# 手動設定要顯示在圖表上的指標 (可選: "SDR", "SI-SDR", "SIR", "SAR")
 # 例如只想看 SDR 和 SI-SDR，就改為 ["SDR", "SI-SDR"]
 VISIBLE_METRICS = ["SDR", "SI-SDR", "SAR"]
 
@@ -166,7 +166,7 @@ def plot_results(df, save_path="evaluation_chart_accomp.png", mode_name="both"):
     plt.grid(axis='y', linestyle='--', alpha=0.7)
 
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"\n📈 圖表已儲存至: {save_path}")
+    print(f"\n圖表已儲存至: {save_path}")
 
 if __name__ == "__main__":
     main()

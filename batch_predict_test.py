@@ -17,8 +17,8 @@ PROJECT_ROOT = r"C:\Users\tt\Desktop\project"
 sys.path.append(os.path.join(PROJECT_ROOT, "separation_mel_"))
 sys.path.append(os.path.join(PROJECT_ROOT, "separation_accomp_"))
 
-from utils_melody.u_net import AudioUNet as MelodyUNet
-from utils_accomp.u_net import AudioUNet as AccompUNet
+from separation_mel_.utils_melody.u_net import AudioUNet as MelodyUNet
+from separation_accomp_.utils_accomp.u_net import AudioUNet as AccompUNet
 
 CSV_FILE = os.path.join(PROJECT_ROOT, "classical_dataset.csv")
 MEL_MODEL_PATH = os.path.join(PROJECT_ROOT, "checkpoints_mel_task/best_model.pth")

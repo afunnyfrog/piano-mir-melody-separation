@@ -15,8 +15,8 @@ sys.path.append(os.path.join(PROJECT_ROOT, "separation_mel_"))
 sys.path.append(os.path.join(PROJECT_ROOT, "separation_accomp_"))
 
 # 分別載入各自的類別定義
-from utils_melody.u_net import AudioUNet as MelodyUNet
-from utils_accomp.u_net import AudioUNet as AccompUNet
+from separation_mel_.utils_melody.u_net import AudioUNet as MelodyUNet
+from separation_accomp_.utils_accomp.u_net import AudioUNet as AccompUNet
 
 # ==========================================
 #               參數設定

@@ -38,17 +38,17 @@ def main():
     )
 
     if not target_tasks:
-        print(f"❌ 找不到任何有效的基底任務: {target_name}。請先手動執行一次 {target_name} 並確保它成功回報指標。")
+        print(f" 找不到任何有效的基底任務: {target_name}。請先手動執行一次 {target_name} 並確保它成功回報指標。")
         return
 
     # 抓取最新的那一個
     target_task = target_tasks[-1]
     base_task_id = target_task.id
-    print(f"✅ 找到基底任務 ID: {base_task_id} (名稱: {target_name}, 狀態: {target_task.status})")
+    print(f"找到基底任務 ID: {base_task_id} (名稱: {target_name}, 狀態: {target_task.status})")
 
     # 檢查參數是否存在於該任務 (Debug 用)
     params = list(target_task.get_parameters().keys())
-    print(f"🔍 該任務偵測到的參數路徑範例: {params[:5] if params else '無'}")
+    print(f" 該任務偵測到的參數路徑範例: {params[:5] if params else '無'}")
 
     # 5. 定義調優範圍
     if args.task == 'melody':
@@ -82,11 +82,11 @@ def main():
     )
 
     # 7. 開始執行
-    print(f"🚀 開始進行 {args.task} 的超參數調優 (每個 Job 跑 {args.epochs} Epochs)...")
+    print(f" 開始進行 {args.task} 的超參數調優 (每個 Job 跑 {args.epochs} Epochs)...")
     optimizer.start()
     optimizer.wait()
     optimizer.stop()
-    print(f"🎉 {args.task} 的調優已完成！")
+    print(f" {args.task} 的調優已完成！")
 
 
 if __name__ == "__main__":

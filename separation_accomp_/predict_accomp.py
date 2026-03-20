@@ -46,15 +46,15 @@ def main():
     
     # 2. 載入權重 (處理字典格式與 weights_only 警告)
     if os.path.exists(MODEL_PATH):
-        print(f"🔄 正在載入權重: {MODEL_PATH}")
+        print(f"正在載入權重: {MODEL_PATH}")
         checkpoint = torch.load(MODEL_PATH, map_location=device, weights_only=False)
         if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
             model.load_state_dict(checkpoint['model_state_dict'])
         else:
             model.load_state_dict(checkpoint)
-        print("✅ 權重載入成功！")
+        print("權重載入成功！")
     else:
-        print(f"❌ 找不到權重檔: {MODEL_PATH}")
+        print(f"找不到權重檔: {MODEL_PATH}")
         return
     
     model.eval()
@@ -74,7 +74,7 @@ def main():
         
     print(f"DEBUG: 模型輸出最大值: {mapped_spec.max():.4f}, 最小值: {mapped_spec.min():.4f}")
     if mapped_spec.max() < 1e-3:
-        print("⚠️ 警告：模型輸出幾乎全為零，可能需要更多訓練或檢查輸入！")
+        print(" 警告：模型輸出幾乎全為零，可能需要更多訓練或檢查輸入！")
 
     # 6. 還原音訊
     print("正在從生成的頻譜還原音訊...")
@@ -98,14 +98,14 @@ def main():
     if max_amp > 1e-7:
         y_recon = y_recon * (0.9 / max_amp)
     else:
-        print("❌ 錯誤：還原後的波形振幅過小，無法輸出聲音。")
+        print(" 錯誤：還原後的波形振幅過小，無法輸出聲音。")
         return
     
     save_path = os.path.join(OUTPUT_DIR, OUTPUT_FILENAME)
     sf.write(save_path, y_recon, SAMPLE_RATE)
-    print(f"💾 已儲存生成結果: {save_path}")
+    print(f"已儲存生成結果: {save_path}")
 
-    print("\n🎉 處理完成！請至結果資料夾檢查輸出。")
+    print("\n處理完成！請至結果資料夾檢查輸出。")
 
 if __name__ == "__main__":
     main()

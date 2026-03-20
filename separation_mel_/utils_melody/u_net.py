@@ -107,7 +107,7 @@ class AudioUNet(nn.Module):
         
         logits = self.outc(u4) 
         
-        # ✨ [伴奏扣除模式]：預測伴奏遮罩，扣除後得到旋律
+        #  [伴奏扣除模式]：預測伴奏遮罩，扣除後得到旋律
         # (邏輯與原先生成伴奏時對稱)
         acc_mask = torch.sigmoid(logits)
         mel_mask = 1.0 - acc_mask

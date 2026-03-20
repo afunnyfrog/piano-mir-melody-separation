@@ -256,7 +256,7 @@ def main():
                 'train_history': train_history,
                 'val_history': val_history
             }, os.path.join(cfg.checkpoint_dir, "best_model.pth"))
-            print("🏆 Best Model Saved!")
+            print("Best Model Saved!")
 
         if (epoch + 1) % 10 == 0:
             torch.save({

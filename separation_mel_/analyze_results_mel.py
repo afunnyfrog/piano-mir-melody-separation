@@ -17,7 +17,7 @@ SAVE_CHART = "melody_evaluation_chart.png"
 REPORT_PATH = "melody_separation_report.csv"
 SAMPLE_RATE = 44100
 
-# ✨ 手動設定要顯示在圖表上的指標 (可選: "SDR", "SI-SDR", "SIR", "SAR")
+#  手動設定要顯示在圖表上的指標 (可選: "SDR", "SI-SDR", "SIR", "SAR")
 VISIBLE_METRICS = ["SDR", "SI-SDR", "SAR"]
 
 # 預估 (Prediction) 檔案路徑
