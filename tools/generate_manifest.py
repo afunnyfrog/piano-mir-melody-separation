@@ -5,7 +5,7 @@ from pathlib import Path
 
 def create_dataset_manifest(
     data_dir, 
-    output_csv="dataset.csv", 
+    output_csv="classical_dataset.csv", 
     extensions=['.wav', '.mp3', '.flac'], 
     split_ratios=(0.8, 0.1, 0.1), 
     seed=42
@@ -25,14 +25,14 @@ def create_dataset_manifest(
         found_files = list(base_path.rglob(f"*{ext}"))
         
         for f in found_files:
-            # === 關鍵修改：只保留 Mixed 音訊 ===
-            # 方法 1: 檢查檔名結尾 (最準確)
+            # === 關鍵修改：只保留特定規則的音訊 ===
+            # 1. 檢查是否包含 'Classical_Classical_'
+            if "Classical_Classical_" not in f.name:
+                continue
+
+            # 2. 檢查檔名結尾 (最準確，只保留 Mixed 音訊)
             if not f.name.endswith('_mixed.flac'):
                 continue
-            
-            # 方法 2 (備用): 檢查路徑中是否包含 'mix_audio_flac' 資料夾
-            # if 'mix_audio_flac' not in str(f):
-            #     continue
                 
             all_files.append(f)
     
@@ -41,10 +41,10 @@ def create_dataset_manifest(
     
     total_files = len(all_files)
     if total_files == 0:
-        print("錯誤：找不到任何符合條件的 '_mixed.flac' 檔案。")
+        print("錯誤：找不到任何符合條件的 'Classical_Classical_' 且為 '_mixed.flac' 的檔案。")
         return
 
-    print(f"共找到 {total_files} 個 Mixed 音訊檔案 (已過濾 Melody/Accomp)。")
+    print(f"共找到 {total_files} 個符合條件的 Mixed 音訊檔案。")
 
     # --- 以下邏輯保持不變 ---
     random.seed(seed)
@@ -76,11 +76,11 @@ def create_dataset_manifest(
 # --- 主程式 ---
 if __name__ == "__main__":
     # 使用 Raw String (r"...") 避免路徑錯誤
-    MY_DATA_DIR = r"C:\Users\cebit\Desktop\專題生成\flac_output"
+    MY_DATA_DIR = r"G:\project_data\two_line_midi\flac_output" 
     
     create_dataset_manifest(
         data_dir=MY_DATA_DIR,
-        output_csv="dataset.csv",
+        output_csv="classical_dataset.csv",
         split_ratios=(0.8, 0.1, 0.1), 
         seed=2023
     )
