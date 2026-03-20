@@ -50,35 +50,16 @@ def main():
     params = list(target_task.get_parameters().keys())
     print(f" 該任務偵測到的參數路徑範例: {params[:5] if params else '無'}")
 
-    # 5. 定義調優範圍
-    if args.task == 'melody':
-        hyper_parameters = [
-            # 核心訓練參數
-            UniformParameterRange('General/learning_rate', min_value=4e-6, max_value=2e-4),
-            UniformParameterRange('General/weight_decay', min_value=1e-6, max_value=1e-3),
-            DiscreteParameterRange('General/batch_size', values=[8, 12, 16]),
-            
-            # 損失函數權重 (AudioSeparationLoss)
-            UniformParameterRange('General/melody_weight', min_value=1.0, max_value=15.0),
-            UniformParameterRange('General/alpha_l1', min_value=1.0, max_value=8.0),
-            UniformParameterRange('General/alpha_spectral', min_value=1.0, max_value=8.0),
-            UniformParameterRange('General/alpha_sisdr', min_value=1.0, max_value=15.0),
-            UniformParameterRange('General/alpha_similarity', min_value=1.0, max_value=15.0),
-        ]
-    else:
-        hyper_parameters = [
-            # 核心訓練參數
-            UniformParameterRange('General/learning_rate', min_value=4e-6, max_value=2e-4),
-            UniformParameterRange('General/weight_decay', min_value=1e-6, max_value=1e-3),
-            DiscreteParameterRange('General/batch_size', values=[8, 12, 16]),
-            
-            # 損失函數權重 (AudioSeparationLoss)
-            UniformParameterRange('General/accomp_weight', min_value=1.0, max_value=15.0),
-            UniformParameterRange('General/alpha_l1', min_value=1.0, max_value=8.0),
-            UniformParameterRange('General/alpha_spectral', min_value=1.0, max_value=8.0),
-            UniformParameterRange('General/alpha_sisdr', min_value=1.0, max_value=15.0),
-            UniformParameterRange('General/alpha_similarity', min_value=1.0, max_value=15.0),
-        ]
+     
+    hyper_parameters = [
+        # 核心訓練參數
+        UniformParameterRange('General/learning_rate', min_value=4e-6, max_value=2e-4),
+        UniformParameterRange('General/weight_decay', min_value=1e-6, max_value=1e-3),
+        DiscreteParameterRange('General/batch_size', values=[8, 12, 16]),
+        UniformParameterRange('General/eta_min', min_value=5e-7, max_value=5e-6),
+        DiscreteParameterRange('General/t_0', values=[5, 10, 15]),
+        DiscreteParameterRange('General/t_mult', values=[1, 2, 3]),
+    ]
 
     # 6. 設定優化器
     optimizer = HyperParameterOptimizer(
