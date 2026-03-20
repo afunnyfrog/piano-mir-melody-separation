@@ -138,7 +138,7 @@ def main():
     train_history, val_history = [], []
 
     if cfg.resume_best and cfg.resume_from and os.path.exists(cfg.resume_from):
-        print(f"🔄 發現存檔，正在載入: {cfg.resume_from}")
+        print(f" 發現存檔，正在載入: {cfg.resume_from}")
         try:
             checkpoint = torch.load(cfg.resume_from, map_location=device, weights_only=False)
             model.load_state_dict(checkpoint['model_state_dict'])
@@ -255,7 +255,7 @@ def main():
                 'train_history': train_history,
                 'val_history': val_history
             }, os.path.join(cfg.checkpoint_dir, "best_model.pth"))
-            print("🏆 Best Model Saved!")
+            print(" Best Model Saved!")
 
         if (epoch + 1) % 10 == 0:
             torch.save({
