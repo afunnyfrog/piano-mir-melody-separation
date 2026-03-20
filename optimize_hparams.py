@@ -8,9 +8,9 @@ def main():
     parser = argparse.ArgumentParser(description='ClearML Hyperparameter Optimization for Piano-MIR')
     parser.add_argument('--task', type=str, choices=['melody', 'accomp'], required=True,
                         help='要調優的任務類型: melody 或 accomp')
-    parser.add_argument('--jobs', type=int, default=10, help='總共嘗試的參數組合數量 (預設: 10)')
+    parser.add_argument('--jobs', type=int, default=30, help='總共嘗試的參數組合數量 (預設: 10)')
     parser.add_argument('--concurrent', type=int, default=1, help='同時執行的實驗數量 (預設: 1)')
-    parser.add_argument('--epochs', type=int, default=10, help='每個實驗跑幾個 Epoch (預設: 10)')
+    parser.add_argument('--epochs', type=int, default=20, help='每個實驗跑幾個 Epoch (預設: 10)')
     args = parser.parse_args()
 
     # 2. 根據參數決定任務名稱與基底任務
