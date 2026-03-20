@@ -49,6 +49,17 @@ def get_best_model_info():
     model_path = os.path.join(OPTUNA_BASE_DIR, f"trial_{best_trial.number}", "best_model.pth")
     return {"path": model_path, "params": best_trial.params}
 
+def shorten_track_name(name):
+    """ 縮減冗長的曲名，只保留作曲者與曲名部分 """
+    # 移除副檔名與模式後綴
+    clean_name = name.replace("_mixed.flac", "").replace("_melody.flac", "").replace(".flac", "")
+    # 移除常見的分類前綴
+    parts = clean_name.split("_")
+    if len(parts) >= 3:
+        # 例如: Classical_Classical_Mozart_Sonata -> Mozart_Sonata
+        return "_".join(parts[2:])
+    return clean_name
+
 def evaluate_best_model(model_info, num_samples=1):
     """ 挑選隨機樣本進行詳細的音訊指標評估 (SDR/SI-SDR) """
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -68,10 +79,10 @@ def evaluate_best_model(model_info, num_samples=1):
     si_sdr_metric = ScaleInvariantSignalDistortionRatio()
 
     for mix_path in test_samples:
-        print(f"正在評估: {os.path.basename(mix_path)}...")
+        short_name = shorten_track_name(os.path.basename(mix_path))
+        print(f"正在評估: {short_name}...")
         
         # 取得 Ground Truth 路徑
-        # 假設結構: .../mix_audio_flac/XXX_mixed.flac -> .../melody_audio_flac/XXX_melody.flac
         gt_mel_path = mix_path.replace("mix_audio_flac", "melody_audio_flac").replace("_mixed.flac", "_melody.flac")
         
         if not os.path.exists(gt_mel_path):
@@ -92,7 +103,7 @@ def evaluate_best_model(model_info, num_samples=1):
         phase = np.exp(1.j * np.angle(stft_mix))
         T_min = min(phase.shape[1], mapped_spec.shape[1])
         
-        # 逆正規化 (與 Dataset 邏輯一致: (norm * 10) - 10)
+        # 逆正規化
         mag_recon = np.exp((mapped_spec[:, :T_min] * 10.0) - 10.0)
         full_mag = np.zeros((N_FFT // 2 + 1, T_min))
         full_mag[:TARGET_BINS, :] = mag_recon
@@ -104,12 +115,11 @@ def evaluate_best_model(model_info, num_samples=1):
         y_pred, y_gt = y_pred[:min_len], y_gt[:min_len]
 
         # 計算指標
-        # bss_eval_sources 需要 [n_src, n_samples]
         sdr, sir, sar, _ = bss_eval_sources(y_gt[None, :], y_pred[None, :], compute_permutation=False)
         si_sdr = si_sdr_metric(torch.tensor(y_pred), torch.tensor(y_gt)).item()
 
         results.append({
-            "Track": os.path.basename(mix_path),
+            "Track": short_name,
             "SDR": sdr[0],
             "SI-SDR": si_sdr,
             "SIR": sir[0],
@@ -124,8 +134,10 @@ def main():
     if not model_info: return
 
     # 2. 進行音訊質量評估
-    print("🚀 正在使用最佳模型評估隨機驗證集樣本...")
-    report_df = evaluate_best_model(model_info, num_samples=3)
+    # 增加評估數量至 5 個以便觀察分佈
+    num_samples = 5
+    print(f"🚀 正在使用最佳模型評估 {num_samples} 個隨機驗證集樣本...")
+    report_df = evaluate_best_model(model_info, num_samples=num_samples)
     
     print("\n--- 音訊分離質量評估 (平均值) ---")
     print(report_df.mean(numeric_only=True))
@@ -134,15 +146,35 @@ def main():
     report_df.to_csv("best_model_evaluation.csv", index=False)
     print(f"\n✅ 詳細報告已儲存至: best_model_evaluation.csv")
 
-    # 簡單繪圖
+    # 4. 優化後的視覺化分析
     if not report_df.empty:
-        report_df.set_index("Track")[["SDR", "SI-SDR"]].plot(kind="bar", figsize=(10, 5))
-        plt.title("Best Model Performance on Validation Samples")
-        plt.ylabel("dB")
-        plt.xticks(rotation=45, ha='right')
+        # 設定更大的畫布
+        ax = report_df.set_index("Track")[["SDR", "SI-SDR"]].plot(
+            kind="bar", 
+            figsize=(14, 7), 
+            width=0.7,
+            color=["#3498db", "#e74c3c"] # 漂亮的藍色與紅色
+        )
+        
+        # 在條柱上加入數值標籤
+        for p in ax.patches:
+            ax.annotate(f"{p.get_height():.2f}", 
+                        (p.get_x() + p.get_width() / 2., p.get_height()), 
+                        ha='center', va='center', 
+                        xytext=(0, 9), 
+                        textcoords='offset points',
+                        fontsize=10, fontweight='bold')
+
+        plt.title("Best Model Separation Performance (SDR Higher is Better)", fontsize=16)
+        plt.ylabel("Decibels (dB)", fontsize=12)
+        plt.xlabel("Track Name (Shortened)", fontsize=12)
+        plt.xticks(rotation=20, ha='right') # 減少旋轉角度，更易閱讀
+        plt.grid(axis='y', linestyle='--', alpha=0.6)
+        plt.legend(loc="upper left", frameon=True)
         plt.tight_layout()
-        plt.savefig("evaluation_results.png")
-        print("📊 評估圖表已儲存至: evaluation_results.png")
+        
+        plt.savefig("evaluation_results.png", dpi=300)
+        print("📊 優化後的評估圖表已儲存至: evaluation_results.png")
 
 if __name__ == "__main__":
     main()

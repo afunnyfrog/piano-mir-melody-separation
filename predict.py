@@ -21,7 +21,7 @@ OPTUNA_BASE_DIR = "./optuna_wage_studies"
 # 備用路徑 (如果沒找到 Optuna 記錄則使用此路徑)
 FALLBACK_MODEL_PATH = "./checkpoints_mel_task/best_model.pth"
 
-INPUT_AUDIO = r"C:\Users\cebit\Desktop\專題生成\classified_dataset\mix_audio_flac\Soundtracks_Video Game Music_Mario Kart_Mario_Kart_Character_Select_mixed.flac"
+INPUT_AUDIO = r"C:\Users\cebit\Desktop\專題生成\classified_dataset\mix_audio_flac\Classical_Classical_Wolfgang Amadeus Mozart_Andante_mixed.flac"
 OUTPUT_DIR = "./results_mel_task"
 OUTPUT_FILENAME = "melody_extracted.wav" # 模型輸出的是旋律
 SPEC_FILENAME = "spectrogram_comparison.png"
