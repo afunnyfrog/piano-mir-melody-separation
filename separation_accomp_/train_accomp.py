@@ -12,6 +12,13 @@ import mlflow
 import mlflow.pytorch
 import argparse
 import sys
+import warnings
+import logging
+
+# 屏蔽 MLflow 和相關庫的警告日誌
+warnings.filterwarnings("ignore", category=UserWarning, module="mlflow.*")
+warnings.filterwarnings("ignore", category=FutureWarning, module="mlflow.*")
+logging.getLogger("mlflow").setLevel(logging.ERROR)
 
 # 引入自定義模組
 from tools.turn_STFT_dataset import AudioDataset
@@ -75,7 +82,7 @@ def main():
         os.environ['PYTORCH_KERNEL_CACHE_PATH'] = os.path.join(os.getcwd(), '.torch_kernel_cache')
         os.makedirs(os.environ['PYTORCH_KERNEL_CACHE_PATH'], exist_ok=True)
 
-        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = torch.device("cuda" if torch.available() else "cpu")
         print(f"使用裝置: {device}")
 
         if not os.path.exists(cfg.checkpoint_dir):
@@ -86,9 +93,8 @@ def main():
         train_loader = DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers, pin_memory=cfg.pin_memory, drop_last=cfg.drop_last)
         val_loader = DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False, num_workers=cfg.num_workers, pin_memory=cfg.pin_memory, drop_last=cfg.drop_last)
 
-        # 獲取一個範例輸入用於 MLflow 模型追蹤 (TorchScript 導出需要)
         sample_batch = next(iter(val_loader))
-        input_example = sample_batch[0][0:1].numpy() # 抓取第一個樣本並轉為 numpy
+        input_example = sample_batch[0][0:1].cpu().numpy()
 
         model = AudioUNet(n_channels=cfg.n_channels, n_classes=cfg.n_classes).to(device)
         criterion = AudioSeparationLoss(alpha_l1=cfg.alpha_l1, alpha_spectral=cfg.alpha_spectral, alpha_sisdr=cfg.alpha_sisdr, alpha_similarity=cfg.alpha_similarity, melody_weight=cfg.melody_weight, accomp_weight=cfg.accomp_weight).to(device)
@@ -117,7 +123,6 @@ def main():
         
         try:
             for epoch in range(start_epoch, start_epoch + cfg.run_epochs):
-                # 遠端檢查狀態
                 current_run_status = mlflow.get_run(run.info.run_id).info.status
                 if current_run_status in ["KILLED", "FINISHED"]:
                     print(f"\n[INFO] MLflow 狀態變更為 {current_run_status}，正在停止訓練...")
@@ -172,18 +177,32 @@ def main():
                     best_val_loss = avg_val_loss
                     best_model_path = os.path.join(cfg.checkpoint_dir, "best_model.pth")
                     torch.save({'epoch': epoch + 1, 'model_state_dict': model.state_dict(), 'optimizer_state_dict': optimizer.state_dict(), 'best_val_loss': best_val_loss}, best_model_path)
-                    # 記錄最佳模型到 MLflow
-                    mlflow.pytorch.log_model(model, name="best_model", registered_model_name="Piano-Accomp-Separation", export_model=True, input_example=input_example)
+                    
+                    model.cpu()
+                    # 顯式指定 serialization_format="pickle" 並屏蔽日誌來去除警告
+                    mlflow.pytorch.log_model(
+                        model, 
+                        name="best_model", 
+                        registered_model_name="Piano-Accomp-Separation", 
+                        input_example=input_example,
+                        serialization_format="pickle"
+                    )
+                    model.to(device)
                     print(" [SAVED] Best Model Logged to MLflow!")
 
         except KeyboardInterrupt:
             print("\n" + "!"*30)
             print("偵測到 Ctrl+C！正在安全保存進度...")
-            # 儲存最後的中斷權重
             interrupted_path = os.path.join(cfg.checkpoint_dir, "interrupted_model.pth")
             torch.save({'epoch': epoch, 'model_state_dict': model.state_dict()}, interrupted_path)
-            mlflow.pytorch.log_model(model, name="interrupted_model", export_model=True, input_example=input_example)
-            print("中斷進度已上傳至 MLflow，程式即將退出。")
+            model.cpu()
+            mlflow.pytorch.log_model(
+                model, 
+                name="interrupted_model", 
+                input_example=input_example,
+                serialization_format="pickle"
+            )
+            print("中斷進度已上傳至 MLflow。")
             sys.exit(0)
 
     print("="*60 + "\n任務完成！")
