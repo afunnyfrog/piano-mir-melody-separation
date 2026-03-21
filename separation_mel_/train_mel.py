@@ -54,7 +54,11 @@ class TrainConfig:
 
 def main():
     # 初始化 ClearML Task
-    task = Task.init(project_name='piano-mir-melody-separation', task_name='Melody-Separation-Training')
+    task = Task.init(
+        project_name='piano-mir-melody-separation', 
+        task_name='Melody-Separation-Training',
+        reuse_last_task_id=False
+    )
     
     # 建立配置物件
     cfg = TrainConfig()
@@ -163,6 +167,11 @@ def main():
     #        訓練迴圈
     # ===========================
     for epoch in range(start_epoch, end_epoch):
+        # 檢查伺服器是否要求中止任務
+        if task.get_status() == 'stopped':
+            print("[INFO] 偵測到 ClearML 伺服器已將任務設為停止，正在安全退出訓練迴圈...")
+            break
+            
         start_time = time.time()
 
         # --- Training ---
