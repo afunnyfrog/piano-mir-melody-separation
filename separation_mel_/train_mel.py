@@ -170,7 +170,7 @@ def main():
                     best_model_path = os.path.join(cfg.checkpoint_dir, "best_model.pth")
                     torch.save({'epoch': epoch + 1, 'model_state_dict': model.state_dict(), 'optimizer_state_dict': optimizer.state_dict(), 'best_val_loss': best_val_loss}, best_model_path)
                     # 記錄最佳模型到 MLflow
-                    mlflow.pytorch.log_model(model, "best_model", registered_model_name="Piano-Melody-Separation")
+                    mlflow.pytorch.log_model(model, name="best_model", registered_model_name="Piano-Melody-Separation", export_model=True)
                     print(" [SAVED] Best Model Logged to MLflow!")
 
         except KeyboardInterrupt:
@@ -178,7 +178,7 @@ def main():
             print("偵測到 Ctrl+C！正在安全保存進度...")
             interrupted_path = os.path.join(cfg.checkpoint_dir, "interrupted_model.pth")
             torch.save({'epoch': epoch, 'model_state_dict': model.state_dict()}, interrupted_path)
-            mlflow.pytorch.log_model(model, "interrupted_model")
+            mlflow.pytorch.log_model(model, name="interrupted_model", export_model=True)
             print("中斷進度已上傳至 MLflow，程式即將退出。")
             sys.exit(0)
 
