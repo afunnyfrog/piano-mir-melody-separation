@@ -31,6 +31,7 @@ class TrainConfig:
     checkpoint_dir: str = "./checkpoints_acc_task"
     resume_best: bool = False  
     resume_from: str = "./checkpoints_acc_task/best_model.pth"
+    
     batch_size: int = 8
     learning_rate: float = 5e-5
     weight_decay: float = 1e-4
@@ -39,14 +40,17 @@ class TrainConfig:
     t_0: int = 10               
     t_mult: int = 1             
     eta_min: float = 1e-6       
+    
     n_channels: int = 1       
     n_classes: int = 1        
+    
     alpha_l1: float = 3.0
     alpha_spectral: float = 2.0
     alpha_sisdr: float = 5.0 
     alpha_similarity: float = 5.0 
     melody_weight: float = 1.0    
     accomp_weight: float = 7.5    
+    
     print_freq: int = 20      
     num_workers: int = 4      
     pin_memory: bool = True    
