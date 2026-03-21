@@ -238,7 +238,7 @@ melenv/
 `venv`/
 
 node_modules/
-
+mlruns/
 #輸出練習檔
 /wav_output/
 
