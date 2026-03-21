@@ -82,7 +82,7 @@ def main():
         os.environ['PYTORCH_KERNEL_CACHE_PATH'] = os.path.join(os.getcwd(), '.torch_kernel_cache')
         os.makedirs(os.environ['PYTORCH_KERNEL_CACHE_PATH'], exist_ok=True)
 
-        device = torch.device("cuda" if torch.available() else "cpu")
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         print(f"使用裝置: {device}")
 
         if not os.path.exists(cfg.checkpoint_dir):
