@@ -42,7 +42,7 @@ class TrainConfig:
     alpha_spectral: float = 2.0
     alpha_sisdr: float = 5.0 
     alpha_similarity: float = 5.0 # 伴奏/旋律互斥相似度權重 (處罰旋律中的伴奏殘留)
-    melody_weight: float = 7.5    # 旋律擬合權重 (現在是主要目標)
+    melody_weight: float = 2.5    # 旋律擬合權重 (現在是主要目標)
     accomp_weight: float = 1.0    # 被扣除伴奏部分的參考權重
 
     # 5. 其他設定
