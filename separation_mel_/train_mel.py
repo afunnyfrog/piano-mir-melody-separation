@@ -36,7 +36,7 @@ class TrainConfig:
     learning_rate: float = 5e-5
     weight_decay: float = 1e-4
     run_epochs: int = 80
-    warmup_epochs: int = 10      
+    warmup_epochs: int = 5      
     t_0: int = 10               
     t_mult: int = 1             
     eta_min: float = 1e-6       
@@ -48,7 +48,7 @@ class TrainConfig:
     alpha_spectral: float = 2.0
     alpha_sisdr: float = 5.0 
     alpha_similarity: float = 5.0 
-    melody_weight: float = 2.5    
+    melody_weight: float = 7.5    
     accomp_weight: float = 1.0    
     
     print_freq: int = 20      
