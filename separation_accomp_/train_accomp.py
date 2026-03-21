@@ -188,8 +188,7 @@ def main():
                         model, 
                         name="best_model", 
                         registered_model_name="Piano-Accomp-Separation", 
-                        input_example=input_example,
-                        serialization_format="pickle"
+                        input_example=input_example
                     )
                     model.to(device)
                     print(" [SAVED] Best Model Logged to MLflow!")
