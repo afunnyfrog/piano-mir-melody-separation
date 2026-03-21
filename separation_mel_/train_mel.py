@@ -24,7 +24,7 @@ class TrainConfig:
     resume_from: str = "./checkpoints_mel_task/best_model.pth"
 
     # 2. 訓練超參數
-    batch_size: int = 8
+    batch_size: int = 16
     learning_rate: float = 5e-5
     weight_decay: float = 1e-4
     run_epochs: int = 80
