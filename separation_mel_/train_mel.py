@@ -87,6 +87,10 @@ def main():
         train_loader = DataLoader(train_dataset, batch_size=cfg.batch_size, shuffle=True, num_workers=cfg.num_workers, pin_memory=cfg.pin_memory, drop_last=cfg.drop_last)
         val_loader = DataLoader(val_dataset, batch_size=cfg.batch_size, shuffle=False, num_workers=cfg.num_workers, pin_memory=cfg.pin_memory, drop_last=cfg.drop_last)
 
+        # 獲取一個範例輸入用於 MLflow 模型追蹤 (TorchScript 導出需要)
+        sample_batch = next(iter(val_loader))
+        input_example = sample_batch[0][0:1].numpy() # 抓取第一個樣本並轉為 numpy
+
         model = AudioUNet(n_channels=cfg.n_channels, n_classes=cfg.n_classes).to(device)
         criterion = AudioSeparationLoss(alpha_l1=cfg.alpha_l1, alpha_spectral=cfg.alpha_spectral, alpha_sisdr=cfg.alpha_sisdr, alpha_similarity=cfg.alpha_similarity, melody_weight=cfg.melody_weight, accomp_weight=cfg.accomp_weight).to(device)
         optimizer = optim.AdamW(model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
@@ -170,7 +174,7 @@ def main():
                     best_model_path = os.path.join(cfg.checkpoint_dir, "best_model.pth")
                     torch.save({'epoch': epoch + 1, 'model_state_dict': model.state_dict(), 'optimizer_state_dict': optimizer.state_dict(), 'best_val_loss': best_val_loss}, best_model_path)
                     # 記錄最佳模型到 MLflow
-                    mlflow.pytorch.log_model(model, name="best_model", registered_model_name="Piano-Melody-Separation", export_model=True)
+                    mlflow.pytorch.log_model(model, name="best_model", registered_model_name="Piano-Melody-Separation", export_model=True, input_example=input_example)
                     print(" [SAVED] Best Model Logged to MLflow!")
 
         except KeyboardInterrupt:
@@ -178,7 +182,7 @@ def main():
             print("偵測到 Ctrl+C！正在安全保存進度...")
             interrupted_path = os.path.join(cfg.checkpoint_dir, "interrupted_model.pth")
             torch.save({'epoch': epoch, 'model_state_dict': model.state_dict()}, interrupted_path)
-            mlflow.pytorch.log_model(model, name="interrupted_model", export_model=True)
+            mlflow.pytorch.log_model(model, name="interrupted_model", export_model=True, input_example=input_example)
             print("中斷進度已上傳至 MLflow，程式即將退出。")
             sys.exit(0)
 
