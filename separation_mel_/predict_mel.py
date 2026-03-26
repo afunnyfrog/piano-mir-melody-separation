@@ -9,8 +9,8 @@ from utils_melody.u_net import AudioUNet
 #               參數設定
 # ==========================================
 # 1. 路徑設定
-MODEL_PATH = "./checkpoints_mel_task/best_model.pth"
-INPUT_AUDIO = r"C:\Users\tt\Desktop\project\data\flac_output\mix_audio_flac\Classical_Classical_Franz Schubert_An die Musik_mixed.flac"
+MODEL_PATH = r"F:\project\piano-mir-melody-separation\mlruns\2\models\m-72afe45ce88d4eda88a8e69b273bb89a\artifacts\data\model.pth"
+INPUT_AUDIO = r"G:\project_data\two_line_midi\flac_output\mix_audio_flac\Classical_Classical_John Philip Sousa_Hands Across the Sea_mixed.flac"
 OUTPUT_DIR = "./results_mel_task"
 OUTPUT_FILENAME = "melody_no_hint.wav"
 
@@ -44,17 +44,30 @@ def main():
     print(f"正在初始化模型架構 ({N_CHANNELS} in, {N_CLASSES} out)...")
     model = AudioUNet(n_channels=N_CHANNELS, n_classes=N_CLASSES).to(device)
     
-    # 2. 載入權重 (處理字典格式與 weights_only 警告)
+    # 2. 載入模型/權重 (支援完整物件與 state_dict 字典)
     if os.path.exists(MODEL_PATH):
-        print(f"[UPDATE] 正在載入權重: {MODEL_PATH}")
+        print(f"[UPDATE] 正在載入: {MODEL_PATH}")
         checkpoint = torch.load(MODEL_PATH, map_location=device, weights_only=False)
-        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
-            model.load_state_dict(checkpoint['model_state_dict'])
+        
+        # 情況 1: 載入的是完整的模型物件 (nn.Module)
+        if isinstance(checkpoint, torch.nn.Module):
+            model = checkpoint.to(device)
+            print("[INFO] 檢測到完整模型物件，已直接載入。")
+        
+        # 情況 2: 載入的是字典 (可能包含 model_state_dict 或本身就是 state_dict)
+        elif isinstance(checkpoint, dict):
+            if 'model_state_dict' in checkpoint:
+                model.load_state_dict(checkpoint['model_state_dict'])
+                print("[INFO] 檢測到 Checkpoint 字典，已從 'model_state_dict' 載入。")
+            else:
+                model.load_state_dict(checkpoint)
+                print("[INFO] 檢測到 State Dict 字典，已載入權重。")
         else:
-            model.load_state_dict(checkpoint)
-        print("[SUCCESS] 權重載入成功！")
+            raise TypeError(f"不支援的載入類型: {type(checkpoint)}")
+            
+        print("[SUCCESS] 載入成功！")
     else:
-        print(f"[ERROR] 找不到權重檔: {MODEL_PATH}")
+        print(f"[ERROR] 找不到檔案: {MODEL_PATH}")
         return
     
     model.eval()

@@ -7,11 +7,10 @@ import sys
 
 def objective(trial, args):
     # 1. 定義超參數採樣範圍
-    lr = trial.suggest_float("learning_rate", 4e-6, 2e-4, log=True)
-    weight_decay = trial.suggest_float("weight_decay", 1e-6, 1e-3, log=True)
-    batch_size = trial.suggest_categorical("batch_size", [8, 12, 16])
-    eta_min = trial.suggest_float("eta_min", 5e-7, 5e-6, log=True)
-    t_0 = trial.suggest_categorical("t_0", [5, 10, 15])
+    lr = trial.suggest_float("learning_rate", 1e-4, 5e-4, log=True)
+    batch_size = trial.suggest_categorical("batch_size", [8, 12])
+    eta_min = trial.suggest_float("eta_min", 1e-6, 4e-6, log=True)
+    t_0 = trial.suggest_categorical("t_0", [5, 10])
     t_mult = trial.suggest_categorical("t_mult", [1, 2, 3])
 
     # 2. 準備執行指令
@@ -23,7 +22,6 @@ def objective(trial, args):
     cmd = [
         sys.executable, script_path,
         "--learning_rate", str(lr),
-        "--weight_decay", str(weight_decay),
         "--batch_size", str(batch_size),
         "--eta_min", str(eta_min),
         "--t_0", str(t_0),

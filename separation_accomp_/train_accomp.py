@@ -60,7 +60,6 @@ def main():
     parser = argparse.ArgumentParser(description='Train Accomp Separation Model')
     parser.add_argument('--learning_rate', type=float, default=None)
     parser.add_argument('--batch_size', type=int, default=None)
-    parser.add_argument('--weight_decay', type=float, default=None)
     parser.add_argument('--run_epochs', type=int, default=None)
     parser.add_argument('--t_0', type=int, default=None)
     parser.add_argument('--t_mult', type=int, default=None)
@@ -72,7 +71,6 @@ def main():
     
     if args.learning_rate is not None: cfg.learning_rate = args.learning_rate
     if args.batch_size is not None: cfg.batch_size = args.batch_size
-    if args.weight_decay is not None: cfg.weight_decay = args.weight_decay
     if args.run_epochs is not None: cfg.run_epochs = args.run_epochs
     if args.t_0 is not None: cfg.t_0 = args.t_0
     if args.t_mult is not None: cfg.t_mult = args.t_mult
