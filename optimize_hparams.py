@@ -14,9 +14,10 @@ def objective(trial, args):
     t_mult = trial.suggest_categorical("t_mult", [1])
 
     # 2. 準備執行指令
+    task_suffix = "mel" if args.task == 'melody' else "accomp"
     script_path = os.path.join(
-        "separation_mel_" if args.task == 'melody' else "separation_accomp_",
-        f"train_{args.task[:3]}.py"
+        f"separation_{args.task[:3]}_",
+        f"train_{task_suffix}.py"
     )
     
     cmd = [
