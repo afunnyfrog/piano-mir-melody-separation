@@ -33,12 +33,12 @@ class TrainConfig:
     resume_from: str = "./checkpoints_mel_task/best_model.pth"
     
     batch_size: int = 8
-    learning_rate: float = 5e-5
+    learning_rate: float = 4e-4
     weight_decay: float = 1e-4
-    run_epochs: int = 80
+    run_epochs: int = 50
     warmup_epochs: int = 5      
-    t_0: int = 5               
-    t_mult: int = 2             
+    t_0: int = 10               
+    t_mult: int = 1             
     eta_min: float = 15e-7       
     
     n_channels: int = 1       
