@@ -11,7 +11,7 @@ def objective(trial, args):
     batch_size = trial.suggest_categorical("batch_size", [8, 12])
     eta_min = trial.suggest_float("eta_min", 1e-6, 4e-6, log=True)
     t_0 = trial.suggest_categorical("t_0", [5, 10])
-    t_mult = trial.suggest_categorical("t_mult", [1, 2, 3])
+    t_mult = trial.suggest_categorical("t_mult", [1])
 
     # 2. 準備執行指令
     script_path = os.path.join(

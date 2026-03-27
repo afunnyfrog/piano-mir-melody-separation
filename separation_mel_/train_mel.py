@@ -35,7 +35,7 @@ class TrainConfig:
     batch_size: int = 8
     learning_rate: float = 4e-4
     weight_decay: float = 1e-4
-    run_epochs: int = 50
+    run_epochs: int = 55
     warmup_epochs: int = 5      
     t_0: int = 10               
     t_mult: int = 1             
