@@ -16,7 +16,7 @@ def objective(trial, args):
     # 2. 準備執行指令
     task_suffix = "mel" if args.task == 'melody' else "accomp"
     script_path = os.path.join(
-        f"separation_{args.task[:3]}_",
+        f"separation_{task_suffix}_",
         f"train_{task_suffix}.py"
     )
     
