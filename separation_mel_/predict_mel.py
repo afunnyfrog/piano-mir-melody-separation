@@ -10,7 +10,7 @@ from utils_melody.u_net import AudioUNet
 # ==========================================
 # 1. 路徑設定
 MODEL_PATH = r"F:\project\piano-mir-melody-separation\checkpoints_mel_task\best_model.pth"
-INPUT_AUDIO = r"G:\project_data\two_line_midi\flac_output\mix_audio_flac\Classical_Classical_John Philip Sousa_Hands Across the Sea_mixed.flac"
+INPUT_AUDIO = r"G:\project_data\two_line_midi\flac_output\mix_audio_flac\Classical_Classical_Wolfgang Amadeus Mozart_Andante_mixed.flac"
 OUTPUT_DIR = "./results_mel_task"
 OUTPUT_FILENAME = "melody_no_hint.wav"
 

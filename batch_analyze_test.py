@@ -16,15 +16,15 @@ warnings.filterwarnings("ignore")
 # ==========================================
 # 1. 配置區塊 (請確保路徑與你的預測腳本一致)
 # ==========================================
-PROJECT_ROOT = r"C:\Users\tt\Desktop\project"
+PROJECT_ROOT = r"F:\project\piano-mir-melody-separation"
 
 # 預測結果目錄
 MEL_PRED_DIR = os.path.join(PROJECT_ROOT, "results_mel_task")
 ACC_PRED_DIR = os.path.join(PROJECT_ROOT, "results_accomp")
 
 # 標準答案目錄 (GT) - 請確認這兩個路徑是否正確
-GT_MEL_DIR = r"C:\Users\tt\Desktop\piano-mir-melody-separation--\data\flac_output\melody_audio_flac"
-GT_ACC_DIR = r"C:\Users\tt\Desktop\piano-mir-melody-separation--\data\flac_output\accomp_audio_flac"
+GT_MEL_DIR = r"G:\project_data\two_line_midi\flac_output\melody_audio_flac"
+GT_ACC_DIR = r"G:\project_data\two_line_midi\flac_output\accomp_audio_flac"
 
 SAMPLE_RATE = 44100
 FINAL_REPORT_PATH = os.path.join(PROJECT_ROOT, "batch_test_performance_report.csv")

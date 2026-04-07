@@ -13,7 +13,7 @@ warnings.filterwarnings("ignore")
 # ==========================================
 # 1. 環境配置
 # ==========================================
-PROJECT_ROOT = r"C:\Users\tt\Desktop\project"
+PROJECT_ROOT = r"F:\project\piano-mir-melody-separation"
 sys.path.append(os.path.join(PROJECT_ROOT, "separation_mel_"))
 sys.path.append(os.path.join(PROJECT_ROOT, "separation_accomp_"))
 

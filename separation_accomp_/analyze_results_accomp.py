@@ -22,12 +22,12 @@ SAMPLE_RATE = 44100
 VISIBLE_METRICS = ["SDR", "SI-SDR", "SAR"]
 
 # 預估 (Prediction) 檔案路徑
-PRED_MELODY_PATH = r"C:\Users\tt\Desktop\project\results_accomp\melody_no_hint.wav"
-PRED_ACCOMP_PATH = r"C:\Users\tt\Desktop\project\results_accomp\accompaniment_no_hint.wav"
+PRED_MELODY_PATH = r"F:\project\piano-mir-melody-separation\results_accomp\melody_no_hint.wav"
+PRED_ACCOMP_PATH = r"F:\project\piano-mir-melody-separation\results_accomp\accompaniment_no_hint.wav"
 
 # 真值 (Ground Truth) 檔案路徑
-GT_MELODY_PATH = r"C:\Users\tt\Desktop\project\data\flac_output\melody_audio_flac\Classical_Classical_Franz Schubert_An die Musik_melody.flac"
-GT_ACCOMP_PATH = r"C:\Users\tt\Desktop\project\data\flac_output\accomp_audio_flac\Classical_Classical_Franz Schubert_An die Musik_accomp.flac"
+GT_MELODY_PATH = r"G:\project_data\two_line_midi\flac_output\melody_audio_flac\Classical_Classical_John Philip Sousa_Hands Across the Sea_melody.flac"
+GT_ACCOMP_PATH = r"G:\project_data\two_line_midi\flac_output\accomp_audio_flac\Classical_Classical_John Philip Sousa_Hands Across the Sea_accomp.flac"
 # ==========================================
 # ==========================================
 
