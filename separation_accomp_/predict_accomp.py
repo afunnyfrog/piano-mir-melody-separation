@@ -3,16 +3,17 @@ import librosa
 import numpy as np
 import soundfile as sf
 import os
+import glob
 from utils_accomp.u_net import AudioUNet
 
 # ==========================================
 #               參數設定
 # ==========================================
 # 1. 路徑設定
-MODEL_PATH = "./checkpoints_acc_task/best_model.pth"
-INPUT_AUDIO = r"G:\project_data\two_line_midi\flac_output\mix_audio_flac\Classical_Classical_Wolfgang Amadeus Mozart_Andante_mixed.flac"
-OUTPUT_DIR = "./results_accomp"
-OUTPUT_FILENAME = "accompaniment_no_hint.wav"
+MODEL_PATH = r"C:\Users\cebit\Desktop\專題生成\wage code\checkpoints_acc_task\best_acc_model.pth"
+# 可以是單一檔案路徑，或是一個包含音訊檔的目錄
+INPUT_PATH = r"C:\Users\cebit\Desktop\專題生成\wage code\欲分離音樂"
+OUTPUT_DIR = r"C:\Users\cebit\Desktop\專題生成\wage code\results_mel_task"
 
 # 2. 推論設定
 TEST_DURATION = 60.0  # 測試音訊長度 (秒)，設為 None 則處理整首
@@ -32,6 +33,53 @@ TARGET_BINS = 1024
 os.environ['PYTORCH_KERNEL_CACHE_PATH'] = os.path.join(os.getcwd(), '.torch_kernel_cache')
 # ==========================================
 
+def process_file(file_path, model, device):
+    """處理單一音訊檔案"""
+    file_name = os.path.basename(file_path)
+    name_without_ext = os.path.splitext(file_name)[0]
+    save_path = os.path.join(OUTPUT_DIR, f"{name_without_ext}_accompaniment.wav")
+    
+    print(f"\n[PROCESS] 正在處理: {file_name} ...")
+    
+    try:
+        # 3. 讀取音訊波形
+        y, sr = librosa.load(file_path, sr=SAMPLE_RATE, duration=TEST_DURATION)
+        
+        # 準備模型輸入: (1, L)
+        waveform_tensor = torch.from_numpy(y).unsqueeze(0).to(device)
+        
+        # 4. 推論
+        print("正在進行分離運算...")
+        with torch.no_grad():
+            # 取得模型生成的頻譜 [1, 1, 1024, T]
+            mapped_spec = model(waveform_tensor).cpu().numpy()[0, 0]
+            
+        # 6. 還原音訊
+        print("正在從生成的頻譜還原音訊...")
+        stft_full = librosa.stft(y, n_fft=N_FFT, hop_length=HOP_LENGTH)
+        phase = np.exp(1.j * np.angle(stft_full))
+        T_min = min(phase.shape[1], mapped_spec.shape[1])
+        
+        # --- 逆正規化 ---
+        current_mapped = mapped_spec[:, :T_min]
+        log_recon = (current_mapped * 10.0) - 10.0
+        mag_recon = np.exp(log_recon)
+        
+        full_mag = np.vstack([mag_recon, np.zeros((1, T_min))])
+        y_recon = librosa.istft(full_mag * phase[:, :T_min], hop_length=HOP_LENGTH)
+        
+        # 音量最大化 (調降係數至 0.5 避免爆音)
+        max_amp = np.max(np.abs(y_recon))
+        if max_amp > 1e-7:
+            y_recon = y_recon * (0.5 / max_amp)
+            sf.write(save_path, y_recon, SAMPLE_RATE)
+            print(f"[SAVE] 已儲存生成結果: {save_path}")
+        else:
+            print(f"[ERROR] 檔案 {file_name} 還原後的波形振幅過小，無法輸出聲音。")
+            
+    except Exception as e:
+        print(f"[ERROR] 處理檔案 {file_name} 時發生錯誤: {e}")
+
 def main():
     # 確保快取與輸出目錄存在
     os.makedirs(os.environ['PYTORCH_KERNEL_CACHE_PATH'], exist_ok=True)
@@ -44,7 +92,7 @@ def main():
     print(f"正在初始化模型架構 ({N_CHANNELS} in, {N_CLASSES} out)...")
     model = AudioUNet(n_channels=N_CHANNELS, n_classes=N_CLASSES).to(device)
     
-    # 2. 載入權重 (處理字典格式與 weights_only 警告)
+    # 2. 載入權重
     if os.path.exists(MODEL_PATH):
         print(f"正在載入權重: {MODEL_PATH}")
         checkpoint = torch.load(MODEL_PATH, map_location=device, weights_only=False)
@@ -59,53 +107,24 @@ def main():
     
     model.eval()
 
-    # 3. 讀取音訊波形
-    print(f"正在讀取音訊: {INPUT_AUDIO} ...")
-    y, sr = librosa.load(INPUT_AUDIO, sr=SAMPLE_RATE, duration=TEST_DURATION)
-    
-    # 準備模型輸入: (1, L)
-    waveform_tensor = torch.from_numpy(y).unsqueeze(0).to(device)
-    
-    # 4. 推論
-    print("正在進行分離運算 (譜映射生成模式)...")
-    with torch.no_grad():
-        # 取得模型生成的頻譜 [1, 1, 1024, T]
-        mapped_spec = model(waveform_tensor).cpu().numpy()[0, 0]
-        
-    print(f"DEBUG: 模型輸出最大值: {mapped_spec.max():.4f}, 最小值: {mapped_spec.min():.4f}")
-    if mapped_spec.max() < 1e-3:
-        print(" 警告：模型輸出幾乎全為零，可能需要更多訓練或檢查輸入！")
-
-    # 6. 還原音訊
-    print("正在從生成的頻譜還原音訊...")
-    stft_full = librosa.stft(y, n_fft=N_FFT, hop_length=HOP_LENGTH)
-    phase = np.exp(1.j * np.angle(stft_full))
-    T_min = min(phase.shape[1], mapped_spec.shape[1])
-    
-    # --- 逆正規化 (必須與 Dataset 邏輯一致) ---
-    current_mapped = mapped_spec[:, :T_min]
-    # 逆向縮放： (norm * 10) - 10
-    log_recon = (current_mapped * 10.0) - 10.0
-    # 轉回線性 Magnitude
-    mag_recon = np.exp(log_recon)
-    
-    # 補回第 1025 點並結合原始相位
-    full_mag = np.vstack([mag_recon, np.zeros((1, T_min))])
-    y_recon = librosa.istft(full_mag * phase[:, :T_min], hop_length=HOP_LENGTH)
-    
-    # 音量最大化 (增加防抖動處理)
-    max_amp = np.max(np.abs(y_recon))
-    if max_amp > 1e-7:
-        y_recon = y_recon * (0.9 / max_amp)
+    # 找出所有要處理的檔案
+    if os.path.isdir(INPUT_PATH):
+        # 支援多種格式: wav, mp3, flac
+        audio_files = []
+        for ext in ['*.wav', '*.mp3', '*.flac']:
+            audio_files.extend(glob.glob(os.path.join(INPUT_PATH, ext)))
+        print(f"[INFO] 在目錄中找到 {len(audio_files)} 個音訊檔案。")
+    elif os.path.isfile(INPUT_PATH):
+        audio_files = [INPUT_PATH]
     else:
-        print(" 錯誤：還原後的波形振幅過小，無法輸出聲音。")
+        print(f"[ERROR] 找不到路徑: {INPUT_PATH}")
         return
-    
-    save_path = os.path.join(OUTPUT_DIR, OUTPUT_FILENAME)
-    sf.write(save_path, y_recon, SAMPLE_RATE)
-    print(f"已儲存生成結果: {save_path}")
 
-    print("\n處理完成！請至結果資料夾檢查輸出。")
+    # 批次處理
+    for file_path in audio_files:
+        process_file(file_path, model, device)
+
+    print("\n[DONE] 全部處理完成！請至結果資料夾檢查輸出。")
 
 if __name__ == "__main__":
     main()
