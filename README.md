@@ -1,106 +1,71 @@
 # Piano Melody and Accompaniment Separation (Piano-MIR)
 
-[![Python](https://img.shields.io/badge/Python-3.12.6-blue.svg)](https://www.python.org/)
-[![PyTorch](https://img.shields.io/badge/PyTorch-cu121-ee4c2c.svg)](https://pytorch.org/)
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
 
-這是一個專注於鋼琴音訊的旋律與伴奏分離專案。利用深度學習模型 (U-Net)
-從混合的鋼琴音訊中提取出純旋律 (Melody) 與純伴奏 (Accompaniment) 音軌。
+這是一個基於深度學習 (U-Net) 的鋼琴旋律與伴奏分離專案。透過訓練專屬模型，能將混合的鋼琴音訊精準拆解為純旋律與純伴奏兩條音軌。
 
-## 📌 專案特色
-  - 專屬鋼琴優化：針對鋼琴音色的頻譜特性進行訓練。
-  - 雙任務架構：提供獨立的旋律與伴奏分離模型（Mel-Task 與 Acc-Task）。
-  - 完整流水線：包含 MIDI 渲染、資料預處理、模型訓練、自動化推論與效能評估。
-  - 多維度評估：整合 mir_eval 與 SI-SDR 等專業音訊指標。
+## 📂 專案結構說明
+專案已完成模組化整理，各目錄功能如下：
 
-📂 建議專案架構
-為了保持專案整潔，建議您將檔案手動整理如下：
-
-  1 .
-  2 ├── separation_mel_/         # 旋律分離任務核心程式碼
-  3 │   ├── utils_melody/        # 模型定義 (U-Net)、Dataset
-  4 │   └── tools/               # 資料處理工具 (MIDI to Audio, STFT)
-  5 ├── separation_accomp_/      # 伴奏分離任務核心程式碼
-  6 │   ├── utils_accomp/        # 模型定義、Dataset
-  7 │   └── tools/               # 資料處理工具
-  8 ├── data_info/               # 存放資料集清單 (手動移動: dataset.csv, bad_files.txt
-    等)
-  9 ├── results/                 # 存放輸出結果
-  10 │   ├── plots/               # 視覺化圖表 (手動移動: *.png)
-  11 │   └── reports/             # 效能報表 (手動移動: *.csv, *.xlsx)
-  12 ├── predict_all.py           # 整合推論腳本
-  13 ├── analyze_latest.py        # 效能分析工具
-  14 ├── INSTALL.md               # 詳細環境安裝指南
-  15 └── README.md                # 專案說明文件
+*   **`run_separation.py`**: **主程式入口**，用於對整首曲目執行旋律與伴奏的分離。
+*   **`separation_mel_/` & `separation_accomp_/`**: 核心模型目錄，包含各自的訓練腳本 (`train_*.py`) 與模型架構定義。
+*   **`tools/`**: 各種預處理工具。
+    *   `render_midi_to_*.py`: 將 MIDI 渲染為音訊。
+    *   `manifest_generator.py`: 產生訓練所需的 CSV 清單。
+    *   `check_audio_integrity.py`: 檢查資料集音訊是否損毀。
+    *   `visualize_prediction.py`: 視覺化模型的推論頻譜。
+*   **`evaluation/`**: 效能評估與分析。
+    *   `one_predict_test.py`: 隨機抽樣一首歌曲進行快速分離測試。
+    *   `one_analyze_test.py`: 自動評估最新產出的分離結果 (SDR, SI-SDR 指標)。
+    *   `batch_*.py`: 批次執行推論與分析。
+    *   `separation_boxplot.py`: 產生指標分布盒鬚圖。
+*   **`mlflow_training_tools/`**: 模型開發進階工具，包含超參數優化 (`optimize_hparams.py`) 與訓練歷程記錄。
+*   **`data_info/`**: 存放資料集清單 (`dataset.csv`) 與錯誤報告。
+*   **`input/`**: 預設存放待分離的原始音訊檔案。
+*   **`results/`**: 分離後的音訊檔案、視覺化圖表與效能報表。
 
 ## 🚀 快速上手
 
-1. 環境安裝
-請參考 INSTALL.md (INSTALL.md) 完成環境配置。
-  1 pip install -r requirements.txt
+### 1. 環境配置
+詳細步驟請參考 [INSTALL.md](INSTALL.md)。
+```bash
+pip install -r requirements.txt
+```
 
-2. 資料預處理
-如果您有 MIDI 檔案，可以使用以下腳本渲染為 FLAC/WAV：
-  1 python separation_mel_/tools/sf2_midi_to_flac.py
+### 2. 執行分離 (主程式)
+將您的鋼琴音訊放入 `input/` 資料夾，執行：
+```bash
+python run_separation.py
+```
 
-3. 模型訓練
-分別針對旋律或伴奏進行訓練：
+### 3. 快速測試與分析
+若要隨機選取資料集中的一首歌並即時查看分離數據：
+```bash
+# 1. 執行分離測試
+python evaluation/one_predict_test.py
 
-  1 python separation_mel_/train_mel.py
-  2 python separation_accomp_/train_accomp.py
-
-4. 執行推論 (分離音訊)
-使用 predict_all.py 進行整合推論：
-  1 python predict_all.py
+# 2. 自動分析該次分離結果
+python evaluation/one_analyze_test.py
+```
 
 ## 🧠 技術細節
 
-模型架構
-  - Backbone: U-Net 架構。
-  - Encoder/Decoder: 包含多層卷積與跳躍連接 (Skip Connections)，並在深層加入 Dropout
-    防止過擬合。
-  - Input: 短時傅立葉轉換 (STFT) 產出的頻譜圖 (Spectrogram)。
+### 模型架構
+- **Backbone**: U-Net 架構，採用多層卷積與跳躍連接。
+- **Input**: 短時傅立葉轉換 (STFT) 頻譜圖 (Log-magnitude Spectrogram)。
+- **Loss**: 結合了 **L1 Loss**、**Multi-Scale Spectral Loss** 與 **SI-SDR Loss**，確保音質與訊號還原度。
 
-## 損失函數 (Loss Functions)
-模型結合了三種損失函數以確保音質與信號準確度：
-  1. L1 Loss: 基礎頻譜誤差。
-  2. Multi-Scale Spectral Loss: 捕捉不同時間尺度的頻譜特徵。
-  3. SI-SDR Loss: 優化時間域的信號失真比。
+### 效能指標 (Evaluation Metrics)
+我們使用 `mir_eval` 標準進行量化分析：
+- **SDR** (Source-to-Distortion Ratio)
+- **SI-SDR** (Scale-Invariant SDR)
+- **SIR** (Source-to-Interference Ratio)
+- **SAR** (Source-to-Artifacts Ratio)
 
-## 📊 效能評估
-本專案使用以下指標進行驗證：
-  - SDR (Source-to-Distortion Ratio)
-  - SI-SDR (Scale-Invariant Signal-to-Distortion Ratio)
-  - SIR (Source-to-Interference Ratio)
-  - SAR (Source-to-Artifacts Ratio)
+## 📊 開發日誌與權重
+- 本專案整合了 **MLflow** 進行實驗管理，您可以透過 `mlflow_training_tools/` 追蹤訓練過程。
+- 最佳模型權重建議存放於 `checkpoints/` 資料夾。
 
-評估結果與圖表將自動產出於 results/ 資料夾下。
-
-# piano-mir-melody-separation
-
-A deep learning model to separate piano melody from accompaniment tracks.
-一個用來分離鋼琴旋律與伴奏音軌的深度學習模型
-
-## 安裝環境
-
-請參考 [INSTALL.md](INSTALL.md)
-
-## 程式介紹
-
-* 訓練模型
-  * `train.py`：負責設定訓練參數、學習率參數、資料夾位址以及重複訓練
-  * `u-net.py`：基本u-net架構，並在深層加入drop out
-  * `loss.py`：特製損失函數，使用`L1 loss`、`Multi-Scale Spectral Loss`、`SI-SDR Loss`來計算損失。在訓練以及驗證時使用
-* 音訊資料處理
-  * `sf2_midi_to_flac.py`：使用sf2音色庫，將midi檔案渲染成—無損壓縮音訊檔案—.flac。
-  * `sf2_midi_to_wav.py`：使用sf2音色庫，將midi檔案渲染成音訊檔案.wav。
-* 訓練資料處理
-  * `generate_manifest.py`：負責將資料集切分，並使用 `data.csv`儲存以利於程式讀取。
-  * `dataset.py`：在曲目時長內，隨機切分固定時長音訊，並且透過短時傅立葉轉換(STFT)將音訊轉為頻譜圖提供訓練
-* 模型權重測試
-  * `predict.py`：透過模型所產出的權重與模型，將完整的音檔輸入，並且產出旋律與伴奏音檔
-* 其他
-  * `test_audio_file.py`：檢查音訊檔案是否完整，避免有損壞，檢查`flac`檔  
-  * `test.py`：區分wav以及flac檔案經過頻譜圖比對差異
-  * `debug_visualize.py`：於`predict.py`前快速檢視模型輸出行為。
-  * `clean_dataset.py`：同為檢查音訊檔案是否完整，檢查`wav`檔
-  
+---
+*本專案由 AI 輔助整理與優化。*
