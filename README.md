@@ -1,7 +1,7 @@
 # Piano Melody and Accompaniment Separation (Piano-MIR)
 
-![![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)]](https://www.python.org/)
-![PyTorch (https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
+[![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg)](https://pytorch.org/)
 
 這是一個專注於鋼琴音訊的旋律與伴奏分離專案。利用深度學習模型 (U-Net)
 從混合的鋼琴音訊中提取出純旋律 (Melody) 與純伴奏 (Accompaniment) 音軌。
