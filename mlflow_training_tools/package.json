@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "@mlflow/openai": "^0.2.0"
+  }
+}
