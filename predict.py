@@ -3,135 +3,114 @@ import librosa
 import numpy as np
 import soundfile as sf
 import os
-import argparse
 from utils.u_net import AudioUNet
 
-# --- 設定 ---
-# 這裡填寫你訓練好的權重檔案路徑
-MODEL_PATH = "./checkpoints_dynamic_8s/best_model.pth"
-# 設定你要測試的歌曲路徑
-INPUT_AUDIO = r"C:\Users\cebit\Desktop\專題生成\classified_dataset\balanced\mix_audio_flac\Soundtracks_Hollywood_Stockard Channing_There Are Worse Things I Could Do_mixed.flac"
-# 輸出的資料夾
-OUTPUT_DIR = "./results"
+# ==========================================
+#               參數設定
+# ==========================================
+# 1. 路徑設定
+MODEL_PATH = "./checkpoints_mel_task/best_model.pth"
+INPUT_AUDIO = r"G:\project_data\two_line_midi\flac_output\mix_audio_flac\Classical_Classical_John Philip Sousa_Hands Across the Sea_mixed.flac"
+OUTPUT_DIR = "./results_mel_task"
+OUTPUT_FILENAME = "accompaniment_no_hint.wav"
 
+# 2. 推論設定
+TEST_DURATION = 60.0  # 測試音訊長度 (秒)，設為 None 則處理整首
+USE_DEVICE = "cuda"   # "cuda" 或 "cpu"
+
+# 3. 模型設定 (必須與訓練時一致)
+N_CHANNELS = 1        # 輸入通道
+N_CLASSES = 1         # 輸出通道
+
+# 4. 音訊處理參數 (必須與訓練時一致)
 SAMPLE_RATE = 44100
+N_FFT = 2048
+HOP_LENGTH = 512
+TARGET_BINS = 1024
+
+# 5. 快取設定 (解決權限警告)
+os.environ['PYTORCH_KERNEL_CACHE_PATH'] = os.path.join(os.getcwd(), '.torch_kernel_cache')
+# ==========================================
 
 def main():
-    # 1. 準備裝置
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"使用裝置: {device}")
-    
-    if not os.path.exists(OUTPUT_DIR):
-        os.makedirs(OUTPUT_DIR)
+    # 確保快取與輸出目錄存在
+    os.makedirs(os.environ['PYTORCH_KERNEL_CACHE_PATH'], exist_ok=True)
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
-    # 2. 載入模型架構
-    print("正在載入模型...")
-    model = AudioUNet(n_channels=1, n_classes=2).to(device)
+    device = torch.device(USE_DEVICE if torch.cuda.is_available() else "cpu")
+    print(f"使用裝置: {device}")
+
+    # 1. 載入模型架構
+    print(f"正在初始化模型架構 ({N_CHANNELS} in, {N_CLASSES} out)...")
+    model = AudioUNet(n_channels=N_CHANNELS, n_classes=N_CLASSES).to(device)
     
-    # 3. 載入權重 (Load Weights)
+    # 2. 載入權重 (處理字典格式與 weights_only 警告)
     if os.path.exists(MODEL_PATH):
-        model.load_state_dict(torch.load(MODEL_PATH, weights_only=True))
-        print(f"成功載入權重: {MODEL_PATH}")
+        print(f"🔄 正在載入權重: {MODEL_PATH}")
+        checkpoint = torch.load(MODEL_PATH, map_location=device, weights_only=False)
+        if isinstance(checkpoint, dict) and 'model_state_dict' in checkpoint:
+            model.load_state_dict(checkpoint['model_state_dict'])
+        else:
+            model.load_state_dict(checkpoint)
+        print("✅ 權重載入成功！")
     else:
-        print(f"找不到權重檔: {MODEL_PATH}")
+        print(f"❌ 找不到權重檔: {MODEL_PATH}")
         return
     
-    model.eval() # 設定為推論模式 (這很重要！會關閉 Dropout 和 BN 的訓練行為)
+    model.eval()
 
-    # 4. 讀取音訊
+    # 3. 讀取音訊波形
     print(f"正在讀取音訊: {INPUT_AUDIO} ...")
-    # 為了避免記憶體爆掉，建議先用 30 秒片段測試，若顯存夠大可讀整首
-    # duration=30 代表只讀前 30 秒，想讀整首就把 duration 拿掉
-    y, sr = librosa.load(INPUT_AUDIO, sr=SAMPLE_RATE, duration=30.0) 
+    y, sr = librosa.load(INPUT_AUDIO, sr=SAMPLE_RATE, duration=TEST_DURATION)
     
-    # 5. 轉頻譜圖 (STFT)
-    stft = librosa.stft(y, n_fft=2048, hop_length=512)
-    magnitude = np.abs(stft)
-    phase = np.exp(1.j * np.angle(stft)) # 保存相位資訊 (重建聲音需要)
+    # 準備模型輸入: (1, L)
+    waveform_tensor = torch.from_numpy(y).unsqueeze(0).to(device)
     
-    # Log Scale & Normalize
-    log_spec = np.log(magnitude + 1e-6)
-    
-    # 紀錄原始的最大最小值，以便還原
-    min_val = log_spec.min()
-    max_val = log_spec.max()
-    norm_spec = (log_spec - min_val) / (max_val - min_val + 1e-6)
+    # 4. 準備 MIDI Hints (全零)
+    # 計算 STFT 後的時間幀數: L // HOP_LENGTH + 1
+    num_frames = len(y) // HOP_LENGTH + 1
+    midi_hints = torch.zeros((1, 2, TARGET_BINS, num_frames), dtype=torch.float32).to(device)
 
-    # --- 關鍵：維度處理 ---
-    # 訓練時我們丟掉了第 1025 點，這裡也要丟掉
-    input_spec = norm_spec[:1024, :]
-    
-    # 檢查時間軸長度，必須是 16 的倍數 (因為 U-Net 下採樣 4 次)
-    time_steps = input_spec.shape[1]
-    pad_len = 0
-    if time_steps % 16 != 0:
-        pad_len = 16 - (time_steps % 16)
-        input_spec = np.pad(input_spec, ((0,0), (0, pad_len)))
-    
-    # 轉成 Tensor: (1, 1, 1024, Time)
-    input_tensor = torch.tensor(input_spec, dtype=torch.float32).unsqueeze(0).unsqueeze(0).to(device)
+    # 4. 推論
+    print("正在進行分離運算 (譜映射生成模式)...")
+    with torch.no_grad():
+        # 取得模型生成的頻譜 [1, 1, 1024, T]
+        mapped_spec = model(waveform_tensor).cpu().numpy()[0, 0]
+        
+    print(f"DEBUG: 模型輸出最大值: {mapped_spec.max():.4f}, 最小值: {mapped_spec.min():.4f}")
+    if mapped_spec.max() < 1e-3:
+        print("⚠️ 警告：模型輸出幾乎全為零，可能需要更多訓練或檢查輸入！")
 
-    # 6. 推論 (Inference)
-    print("正在進行分離運算...")
-    with torch.no_grad(): # 不計算梯度，省記憶體
-        pred_masks = model(input_tensor)
-        
-    # pred shape: (1, 2, 1024, Time) -> 2 個 Channel (Melody, Accomp)
-    pred_masks = pred_masks.cpu().numpy()[0] # 取出第一筆 batch -> (2, 1024, Time)
+    # 6. 還原音訊
+    print("正在從生成的頻譜還原音訊...")
+    stft_full = librosa.stft(y, n_fft=N_FFT, hop_length=HOP_LENGTH)
+    phase = np.exp(1.j * np.angle(stft_full))
+    T_min = min(phase.shape[1], mapped_spec.shape[1])
+    
+    # --- 逆正規化 (必須與 Dataset 邏輯一致) ---
+    current_mapped = mapped_spec[:, :T_min]
+    # 逆向縮放： (norm * 10) - 10
+    log_recon = (current_mapped * 10.0) - 10.0
+    # 轉回線性 Magnitude
+    mag_recon = np.exp(log_recon)
+    
+    # 補回第 1025 點並結合原始相位
+    full_mag = np.vstack([mag_recon, np.zeros((1, T_min))])
+    y_recon = librosa.istft(full_mag * phase[:, :T_min], hop_length=HOP_LENGTH)
+    
+    # 音量最大化 (增加防抖動處理)
+    max_amp = np.max(np.abs(y_recon))
+    if max_amp > 1e-7:
+        y_recon = y_recon * (0.9 / max_amp)
+    else:
+        print("❌ 錯誤：還原後的波形振幅過小，無法輸出聲音。")
+        return
+    
+    save_path = os.path.join(OUTPUT_DIR, OUTPUT_FILENAME)
+    sf.write(save_path, y_recon, SAMPLE_RATE)
+    print(f"💾 已儲存生成結果: {save_path}")
 
-    # 7. 後處理 (還原成聲音)
-    print("正在應用遮罩還原音訊...")
-    # --- [進階技巧]：互斥鎖定 (Sum Constraint) ---
-    # 強迫 mask_mel + mask_acc = 1
-    # 這能讓分離更乾淨，避免兩個都搶著要同一個聲音    
-    mask_mel = pred_masks[0]
-    mask_acc = pred_masks[1]
-    print("-" * 30)
-    print(f"Melody Mask -> Mean: {mask_mel.mean():.4f}, Max: {mask_mel.max():.4f}, Min: {mask_mel.min():.4f}")
-    print(f"Accomp Mask -> Mean: {mask_acc.mean():.4f}, Max: {mask_acc.max():.4f}, Min: {mask_acc.min():.4f}")
-    print("-" * 30)
-    
-    final_masks = [mask_mel, mask_acc]
-    
-    # 分別處理 Melody (Channel 0) 和 Accomp (Channel 1)
-    for i, name in enumerate(['melody', 'accompaniment']):
-        # 取出頻譜
-        mask = final_masks[i]
-        
-        # 去除剛剛補的 Padding
-        if pad_len > 0:
-            mask = mask[:, :-pad_len]
-            
-        
-        # 補回第 1025 個頻率點 (用 0 補，或是複製第 1024 點)
-        # 我們需要補一行讓它變回 1025
-        mask = np.vstack([mask, np.zeros((1, mask.shape[1]))])
-        # D. [核心步驟] 應用遮罩
-        # 分離後的能量 = 原始能量 (Magnitude) * 遮罩 (Mask)
-        # 這樣做音質最好，因為我們直接操作原始訊號的能量
-        sep_magnitude = magnitude * mask
-        
-        # 結合原始相位 (使用 Phase Reconstruction)
-        # 這是一種簡單的做法，假設分離後的相位跟原曲一樣
-        y_recon = librosa.istft(sep_magnitude * phase, hop_length=512)
-        
-        # --- [自動音量最大化] ---
-        # 1. 找出目前的音量最大值
-        max_amp = np.max(np.abs(y_recon))
-    
-        # 2. 如果聲音太小，就放大它
-        if max_amp > 0:
-            # 將最大值拉到 0.9 (保留一點點空間避免破音 clipping)
-            scale_factor = 0.9 / max_amp
-            y_recon = y_recon * scale_factor
-            print(f"  -> 已自動放大音量 (放大倍率: {scale_factor:.2f}x)")
-        
-        # 存檔
-        save_name = os.path.join(OUTPUT_DIR, f"result_{name}.wav")
-        sf.write(save_name, y_recon, SAMPLE_RATE)
-        print(f"已儲存: {save_name}")
-
-    print("完成！請至 results 資料夾試聽。🎧")
+    print("\n🎉 處理完成！請至結果資料夾檢查輸出。")
 
 if __name__ == "__main__":
     main()

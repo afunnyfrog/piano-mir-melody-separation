@@ -238,3 +238,5 @@ melenv/
 
 #輸出練習檔
 /wav_output/
+
+.torch_kernel_cache/
