@@ -17,17 +17,17 @@ SAVE_CHART = "evaluation_chart_accomp.png"
 REPORT_PATH = "separation_reportaccomp.csv"
 SAMPLE_RATE = 44100
 
-# ✨ 手動設定要顯示在圖表上的指標 (可選: "SDR", "SI-SDR", "SIR", "SAR")
+# 手動設定要顯示在圖表上的指標 (可選: "SDR", "SI-SDR", "SIR", "SAR")
 # 例如只想看 SDR 和 SI-SDR，就改為 ["SDR", "SI-SDR"]
 VISIBLE_METRICS = ["SDR", "SI-SDR", "SAR"]
 
 # 預估 (Prediction) 檔案路徑
-PRED_MELODY_PATH = r"C:\Users\tt\Desktop\project\results_accomp\melody_no_hint.wav"
-PRED_ACCOMP_PATH = r"C:\Users\tt\Desktop\project\results_accomp\accompaniment_no_hint.wav"
+PRED_MELODY_PATH = r"F:\project\piano-mir-melody-separation\results_accomp\melody_no_hint.wav"
+PRED_ACCOMP_PATH = r"F:\project\piano-mir-melody-separation\results_accomp\accompaniment_no_hint.wav"
 
 # 真值 (Ground Truth) 檔案路徑
-GT_MELODY_PATH = r"C:\Users\tt\Desktop\project\data\flac_output\melody_audio_flac\Classical_Classical_Franz Schubert_An die Musik_melody.flac"
-GT_ACCOMP_PATH = r"C:\Users\tt\Desktop\project\data\flac_output\accomp_audio_flac\Classical_Classical_Franz Schubert_An die Musik_accomp.flac"
+GT_MELODY_PATH = r"G:\project_data\two_line_midi\flac_output\melody_audio_flac\Classical_Classical_John Philip Sousa_Hands Across the Sea_melody.flac"
+GT_ACCOMP_PATH = r"G:\project_data\two_line_midi\flac_output\accomp_audio_flac\Classical_Classical_John Philip Sousa_Hands Across the Sea_accomp.flac"
 # ==========================================
 # ==========================================
 
@@ -166,7 +166,7 @@ def plot_results(df, save_path="evaluation_chart_accomp.png", mode_name="both"):
     plt.grid(axis='y', linestyle='--', alpha=0.7)
 
     plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    print(f"\n📈 圖表已儲存至: {save_path}")
+    print(f"\n圖表已儲存至: {save_path}")
 
 if __name__ == "__main__":
     main()
