@@ -7,7 +7,8 @@
 ```bash
 python -m venv venv
 ```
-    > venv：第二個venv可替換成你想要的虛擬環境名稱
+
+> `venv`：第二個`venv`可替換成你想要的虛擬環境名稱
 3. 開啟虛擬環境
     * (Linux/MacOS)：
     ```bash
