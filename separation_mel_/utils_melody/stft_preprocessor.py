@@ -53,7 +53,7 @@ class AudioDataset(Dataset):
         if len(self.data_list) == 0:
             print(f"警告：在 {csv_file} 中找不到任何 {split} 的資料！")
         else:
-            print(f" 成功載入 [{split}] 資料集 (獨立通道多任務模式)")
+            print(f"SUCCESS load  [{split}] dataset")
 
     def __len__(self):
         return len(self.data_list)
@@ -100,9 +100,9 @@ class AudioDataset(Dataset):
             return torch.zeros((1, CONFIG["TARGET_BINS"], num_frames), dtype=torch.float32)
     def load_with_retry(self, idx, retry_count):
         if retry_count > 5:
-            # 失敗 fallback
+            # 失敗 fallback: 回傳 3 個張量
             return torch.zeros(CONFIG["CHUNK_SIZE"]), \
-                torch.zeros((4, CONFIG["TARGET_BINS"], 352)), \
+                torch.zeros((2, CONFIG["TARGET_BINS"], 352)), \
                 torch.zeros((2, CONFIG["CHUNK_SIZE"]))
 
         orig_path = self.data_list[idx]
@@ -123,11 +123,15 @@ class AudioDataset(Dataset):
             # 2. 準備目標答案
             wav_mel, _ = librosa.load(mel_audio_path, sr=CONFIG["SAMPLE_RATE"], offset=start_time, duration=CONFIG["DURATION"])
             wav_acc, _ = librosa.load(acc_audio_path, sr=CONFIG["SAMPLE_RATE"], offset=start_time, duration=CONFIG["DURATION"])
-            spec_mel = self.wav_to_spec(librosa.util.fix_length(wav_mel, size=CONFIG["CHUNK_SIZE"]))
-            spec_acc = self.wav_to_spec(librosa.util.fix_length(wav_acc, size=CONFIG["CHUNK_SIZE"]))
             
-            # 3. 組合答案: [Audio_Mel, Audio_Acc]
-            # 這裡為了維持後續相容性，原本 target 有 4 通道 (含 MIDI)，現在改為 2 通道
+            # 確保擷取後的波形長度完美對齊
+            wav_mel = librosa.util.fix_length(wav_mel, size=CONFIG["CHUNK_SIZE"])
+            wav_acc = librosa.util.fix_length(wav_acc, size=CONFIG["CHUNK_SIZE"])
+            
+            spec_mel = self.wav_to_spec(wav_mel)
+            spec_acc = self.wav_to_spec(wav_acc)
+            
+            # 3. 組合答案: 僅保留 2 通道 [Audio_Mel, Audio_Acc]
             target = torch.cat([spec_mel, spec_acc], dim=0)
             
             # 4. 組合目標時域音訊供 SI-SDR 使用: [Melody_Wav, Accomp_Wav]

@@ -21,7 +21,7 @@ warnings.filterwarnings("ignore", category=FutureWarning, module="mlflow.*")
 logging.getLogger("mlflow").setLevel(logging.ERROR)
 
 # 引入自定義模組
-from tools.turn_STFT_dataset import AudioDataset
+from utils_accomp.stft_preprocessor import AudioDataset
 from utils_accomp.u_net import AudioUNet
 from utils_accomp.loss import AudioSeparationLoss
 
