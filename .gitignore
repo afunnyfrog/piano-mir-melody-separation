@@ -235,8 +235,13 @@ melenv/
 
 #環境檔
 melenv/
+`venv`/
 
+node_modules/
+mlruns/
 #輸出練習檔
 /wav_output/
 
 .torch_kernel_cache/
+
+*.lock
