@@ -6,15 +6,18 @@ import uuid
 import stat
 
 # --- 1. 路徑設定 ---
-# 取得目前這支 Python 程式的位置 (F:\專題\piano-mir-melody-separation)
+# 取得專案根目錄 (假設此腳本在 tools/ 資料夾下)
 CURRENT_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(CURRENT_SCRIPT_DIR)
 
-FLUIDSYNTH_BIN_PATH = r"C:\fluidsynth\bin"
+# 請將 fluidsynth 放入專案目錄下的 tools/fluidsynth，或修改以下路徑
+FLUIDSYNTH_BIN_PATH = os.path.join(PROJECT_ROOT, "tools", "fluidsynth", "bin")
 FLUIDSYNTH_EXE = os.path.join(FLUIDSYNTH_BIN_PATH, "fluidsynth.exe")
-SOUNDFONT_PATH = r"C:\project_data\sf2\FluidR3Mono_GM2-315.SF2"
+# 音色庫檔案
+SOUNDFONT_PATH = os.path.join(PROJECT_ROOT, "data", "sf2", "FluidR3Mono_GM2-315.SF2")
 
-# 輸入資料夾 (依然在 C 槽)
-INPUT_BASE_DIR = r"C:\project_data\two_line_midi"
+# 輸入資料夾 (MIDI 來源)
+INPUT_BASE_DIR = os.path.join(PROJECT_ROOT, "data", "two_line_midi")
 
 # 輸出資料夾 (改到 F 槽，跟你的程式放在一起，絕對有權限)
 OUTPUT_BASE_DIR = os.path.join(CURRENT_SCRIPT_DIR, "wav_output")

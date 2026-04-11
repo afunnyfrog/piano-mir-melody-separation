@@ -9,8 +9,10 @@ import soundfile as sf
 # ---------------------------------------------------------
 # 1. 路徑自適應：確保 import 不會 ModuleNotFoundError
 # ---------------------------------------------------------
-# 將兩個工具包的根目錄都加入 sys.path
-PROJECT_ROOT = r"C:\Users\tt\Desktop\project"
+# 取得專案根目錄 (假設此腳本在 evaluation/ 資料夾下)
+CURRENT_SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(CURRENT_SCRIPT_DIR)
+
 sys.path.append(os.path.join(PROJECT_ROOT, "separation_mel_"))
 sys.path.append(os.path.join(PROJECT_ROOT, "separation_accomp_"))
 

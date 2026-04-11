@@ -17,13 +17,13 @@ from separation_accomp_.utils_accomp.u_net import AudioUNet as AccompUNet
 #               參數設定
 # ==========================================
 # 1. 模型路徑
-MEL_MODEL_PATH = r"C:\Users\cebit\Desktop\專題生成\wage code\checkpoints_mel_task\best_model.pth"
-ACC_MODEL_PATH = r"C:\Users\cebit\Desktop\專題生成\wage code\checkpoints_acc_task\best_acc_model.pth"
+MEL_MODEL_PATH = os.path.join("best_path", "best_mel_model.pth")
+ACC_MODEL_PATH = os.path.join("best_path", "best_acc_model.pth")
 
 # 2. 輸入與輸出
 # 可以是單一檔案路徑，或是一個包含音訊檔的目錄
-INPUT_PATH = r"C:\Users\cebit\Desktop\專題生成\wage code\欲分離音樂"
-OUTPUT_DIR = r"C:\Users\cebit\Desktop\專題生成\wage code\results_combined"
+INPUT_PATH = "input"
+OUTPUT_DIR = os.path.join("results", "combined")
 
 # 3. 推論設定
 TEST_DURATION = 60.0  # 測試音訊長度 (秒)，設為 None 則處理整首
