@@ -51,6 +51,21 @@ python evaluation/one_analyze_test.py
 
 ## 🧠 技術細節
 
+### 引用資料集 (Dataset Citation)
+本專案訓練所採用的核心數據集為 **ADL Piano MIDI**。該數據集包含 11,086 首涵蓋多種風格的鋼琴作品，來源於 Lakh MIDI 數據集及網路公開資源。
+
+如果您使用本專案或相關數據，請引用以下論文：
+
+```bibtex
+@article{ferreira_aiide_2020,
+  title={Computer-Generated Music for Tabletop Role-Playing Games},
+  author={Ferreira, Lucas N and Lelis, Levi HS and Whitehead, Jim},
+  booktitle = {Proceedings of the 16th AAAI Conference on Artificial Intelligence and Interactive Digital Entertainment},
+  series = {AIIDE'20},
+  year={2020},
+}
+```
+
 ### 模型架構
 - **Backbone**: U-Net 架構，採用多層卷積與跳躍連接。
 - **Input**: 短時傅立葉轉換 (STFT) 頻譜圖 (Log-magnitude Spectrogram)。
