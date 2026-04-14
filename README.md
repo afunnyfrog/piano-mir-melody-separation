@@ -55,8 +55,8 @@ python evaluation/one_analyze_test.py
 
 | 模型功能 | 下載連結 | 建議存放路徑 |
 | :--- | :--- | :--- |
-| **旋律分離 (Melody)** | [點此下載 (Google Drive/GitHub)](https://drive.google.com/file/d/1w9jpWapVts-igm3DtdciZuM9PWBk6_--/view?usp=sharing) | `best_path/best_mel_model.pth` |
-| **伴奏分離 (Accomp)** | [點此下載 (Google Drive/GitHub)](https://drive.google.com/file/d/1Z0gwlniOVEL8wZHe_67rd9ROAkq5SReM/view?usp=drive_link) | `best_path/best_acc_model.pth` |
+| **旋律分離 (Melody)** | [點此下載 (Google Drive)](https://drive.google.com/file/d/1w9jpWapVts-igm3DtdciZuM9PWBk6_--/view?usp=sharing) | `best_path/best_mel_model.pth` |
+| **伴奏分離 (Accomp)** | [點此下載 (Google Drive)](https://drive.google.com/file/d/1Z0gwlniOVEL8wZHe_67rd9ROAkq5SReM/view?usp=drive_link) | `best_path/best_acc_model.pth` |
 
 ---
 
