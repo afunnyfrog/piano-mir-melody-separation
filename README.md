@@ -14,7 +14,7 @@
     *   `render_midi_to_*.py`: 將 MIDI 渲染為音訊。
     *   `manifest_generator.py`: 產生訓練所需的 CSV 清單。
     *   `check_audio_integrity.py`: 檢查資料集音訊是否損毀。
-    *   `visualize_prediction.py`: 視覺化模型的推論頻譜。
+    *   `visualize_prediction.py`: 視覺化產生模型的預測分離的頻譜圖。
 *   **`evaluation/`**: 效能評估與分析。
     *   `one_predict_test.py`: 隨機抽樣一首歌曲進行快速分離測試。
     *   `one_analyze_test.py`: 自動評估最新產出的分離結果 (SDR, SI-SDR 指標)。
