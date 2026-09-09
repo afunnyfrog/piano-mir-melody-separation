@@ -12,8 +12,8 @@ class AudioSeparationLoss(nn.Module):
                  alpha_pool=2.0,  # Multi-Scale pool Loss 權重
                  alpha_sisdr=0.5,     # SI-SDR Loss 權重
                  alpha_similarity=2.0, # 旋律/伴奏互斥相似度權重 (處罰伴奏中的旋律殘留)
-                 melody_weight=1.5,   # 旋律通道權重
-                 accomp_weight=1.0):  # 伴奏通道權重
+                 melody_weight=1.0,   # 旋律通道權重
+                 accomp_weight=7.5):  # 伴奏通道權重
         super().__init__()
         
         self.alpha_l1 = alpha_l1
