@@ -6,6 +6,7 @@
 這是一個基於深度學習 (U-Net) 的鋼琴旋律與伴奏分離專案。透過訓練專屬模型，能將混合的鋼琴音訊精準拆解為純旋律與純伴奏兩條音軌。
 
 ## 📂 專案結構說明
+
 專案已完成模組化整理，各目錄功能如下：
 
 *   **`run_separation.py`**: **主程式入口**，用於對整首曲目執行旋律與伴奏的分離。
@@ -28,19 +29,25 @@
 ## 🚀 快速上手
 
 ### 1. 環境配置
+
 詳細步驟請參考 [INSTALL.md](INSTALL.md)。
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ### 2. 執行分離 (主程式)
+
 將您的鋼琴音訊放入 `input/` 資料夾，執行：
+
 ```bash
 python run_separation.py
 ```
 
 ### 3. 快速測試與分析
+
 若要隨機選取資料集中的一首歌並即時查看分離數據：
+
 ```bash
 # 1. 執行分離測試
 python evaluation/one_predict_test.py
@@ -49,23 +56,40 @@ python evaluation/one_predict_test.py
 python evaluation/one_analyze_test.py
 ```
 
+## 📥 預訓練模型 (Pre-trained Models)
+
+為了方便快速使用，我們提供了訓練好的模型權重。請下載後將其放入對應的資料夾中：
+
+
+| 模型功能              | 下載連結                                                                                                         | 建議存放路徑                   |
+| :-------------------- | :--------------------------------------------------------------------------------------------------------------- | :----------------------------- |
+| **旋律分離 (Melody)** | [點此下載 (Google Drive)](https://drive.google.com/file/d/1w9jpWapVts-igm3DtdciZuM9PWBk6_--/view?usp=sharing)    | `best_path/best_mel_model.pth` |
+| **伴奏分離 (Accomp)** | [點此下載 (Google Drive)](https://drive.google.com/file/d/1Z0gwlniOVEL8wZHe_67rd9ROAkq5SReM/view?usp=drive_link) | `best_path/best_acc_model.pth` |
+
+---
+
 ## 🧠 技術細節
 
 ### 模型架構
+
 - **Backbone**: U-Net 架構，採用多層卷積與跳躍連接。
 - **Input**: 短時傅立葉轉換 (STFT) 頻譜圖 (Log-magnitude Spectrogram)。
-- **Loss**: 結合了 **L1 Loss**、**Multi-Scale Spectral Loss** 與 **SI-SDR Loss**，確保音質與訊號還原度。
+- **Loss**: 結合了 **L1 Loss**、**Multi-Scale Pool Loss** 與 **SI-SDR Loss**，確保音質與訊號還原度。
 
 ### 效能指標 (Evaluation Metrics)
+
 我們使用 `mir_eval` 標準進行量化分析：
+
 - **SDR** (Source-to-Distortion Ratio)
 - **SI-SDR** (Scale-Invariant SDR)
 - **SIR** (Source-to-Interference Ratio)
 - **SAR** (Source-to-Artifacts Ratio)
 
 ## 📊 開發日誌與權重
+
 - 本專案整合了 **MLflow** 進行實驗管理，您可以透過 `mlflow_training_tools/` 追蹤訓練過程。
 - 最佳模型權重建議存放於 `checkpoints/` 資料夾。
 
 ---
+
 *本專案由 AI 輔助整理與優化。*
