@@ -53,9 +53,9 @@ python evaluation/one_analyze_test.py
 
 為了方便快速使用，我們提供了訓練好的模型權重。請下載後將其放入對應的資料夾中：
 
-| 模型功能 | 下載連結 | 建議存放路徑 |
-| :--- | :--- | :--- |
-| **旋律分離 (Melody)** | [點此下載 (Google Drive)](https://drive.google.com/file/d/1w9jpWapVts-igm3DtdciZuM9PWBk6_--/view?usp=sharing) | `best_path/best_mel_model.pth` |
+| 模型功能              | 下載連結                                                                                                         | 建議存放路徑                   |
+| :-------------------- | :--------------------------------------------------------------------------------------------------------------- | :----------------------------- |
+| **旋律分離 (Melody)** | [點此下載 (Google Drive)](https://drive.google.com/file/d/1w9jpWapVts-igm3DtdciZuM9PWBk6_--/view?usp=sharing)    | `best_path/best_mel_model.pth` |
 | **伴奏分離 (Accomp)** | [點此下載 (Google Drive)](https://drive.google.com/file/d/1Z0gwlniOVEL8wZHe_67rd9ROAkq5SReM/view?usp=drive_link) | `best_path/best_acc_model.pth` |
 
 ---
@@ -80,7 +80,7 @@ python evaluation/one_analyze_test.py
 ### 模型架構
 - **Backbone**: U-Net 架構，採用多層卷積與跳躍連接。
 - **Input**: 短時傅立葉轉換 (STFT) 頻譜圖 (Log-magnitude Spectrogram)。
-- **Loss**: 結合了 **L1 Loss**、**Multi-Scale Spectral Loss** 與 **SI-SDR Loss**，確保音質與訊號還原度。
+- **Loss**: 結合了 **L1 Loss**、**Multi-Scale pool Loss** 與 **SI-SDR Loss**，確保音質與訊號還原度。
 
 ### 效能指標 (Evaluation Metrics)
 我們使用 `mir_eval` 標準進行量化分析：
