@@ -9,7 +9,7 @@ class AudioSeparationLoss(nn.Module):
     """
     def __init__(self, 
                  alpha_l1=1.0,        # L1 Loss 權重
-                 alpha_spectral=2.0,  # Multi-Scale Spectral Loss 權重
+                 alpha_pool=2.0,  # Multi-Scale pool Loss 權重
                  alpha_sisdr=0.5,     # SI-SDR Loss 權重
                  alpha_similarity=2.0, # 旋律/伴奏互斥相似度權重 (處罰伴奏中的旋律殘留)
                  melody_weight=1.5,   # 旋律通道權重
@@ -17,7 +17,7 @@ class AudioSeparationLoss(nn.Module):
         super().__init__()
         
         self.alpha_l1 = alpha_l1
-        self.alpha_spectral = alpha_spectral
+        self.alpha_pool = alpha_pool
         self.alpha_sisdr = alpha_sisdr
         self.alpha_similarity = alpha_similarity
         self.melody_weight = melody_weight
@@ -42,7 +42,7 @@ class AudioSeparationLoss(nn.Module):
         
         # 1. 伴奏基礎擬合 Loss
         l1_loss_acc = self.l1_loss(pred_acc, target_acc) * self.accomp_weight
-        spec_loss_acc = self.multi_scale_spectral_loss(pred_acc, target_acc) * self.accomp_weight
+        spec_loss_acc = self.multi_scale_pool_loss(pred_acc, target_acc) * self.accomp_weight
         
         # 2. 旋律參考約束 (確保扣掉的東西確實像旋律)
         if pred_mel is not None:
@@ -68,7 +68,7 @@ class AudioSeparationLoss(nn.Module):
         
         # 總 Loss 計算
         total_loss = (self.alpha_l1 * l1_loss_acc + 
-                     self.alpha_spectral * spec_loss_acc + 
+                     self.alpha_pool * spec_loss_acc + 
                      self.alpha_sisdr * sisdr_loss +
                      l1_loss_mel +
                      sim_loss)
@@ -83,7 +83,7 @@ class AudioSeparationLoss(nn.Module):
         
         return total_loss, loss_dict
     
-    def multi_scale_spectral_loss(self, pred, target):
+    def multi_scale_pool_loss(self, pred, target):
         loss = 0.0
         loss += F.l1_loss(pred, target)
         
