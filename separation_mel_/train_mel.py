@@ -45,7 +45,7 @@ class TrainConfig:
     n_classes: int = 1        
     
     alpha_l1: float = 3.0
-    alpha_spectral: float = 2.0
+    alpha_pool: float = 2.0
     alpha_sisdr: float = 5.0 
     alpha_similarity: float = 5.0 
     melody_weight: float = 7.5    
@@ -100,7 +100,7 @@ def main():
         input_example = sample_batch[0][0:1].cpu().numpy()
 
         model = AudioUNet(n_channels=cfg.n_channels, n_classes=cfg.n_classes).to(device)
-        criterion = AudioSeparationLoss(alpha_l1=cfg.alpha_l1, alpha_spectral=cfg.alpha_spectral, alpha_sisdr=cfg.alpha_sisdr, alpha_similarity=cfg.alpha_similarity, melody_weight=cfg.melody_weight, accomp_weight=cfg.accomp_weight).to(device)
+        criterion = AudioSeparationLoss(alpha_l1=cfg.alpha_l1, alpha_pool=cfg.alpha_pool, alpha_sisdr=cfg.alpha_sisdr, alpha_similarity=cfg.alpha_similarity, melody_weight=cfg.melody_weight, accomp_weight=cfg.accomp_weight).to(device)
         optimizer = optim.AdamW(model.parameters(), lr=cfg.learning_rate, weight_decay=cfg.weight_decay)
         
         warmup_scheduler = optim.lr_scheduler.LinearLR(optimizer, start_factor=0.1, end_factor=1.0, total_iters=cfg.warmup_epochs)
